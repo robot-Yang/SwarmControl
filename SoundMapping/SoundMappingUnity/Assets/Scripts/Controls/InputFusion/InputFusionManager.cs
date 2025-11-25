@@ -20,8 +20,8 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Meta Quest headset for camera rotation (yaw)")]
     public MetaQuestInput metaQuestInput;
 
-    [Tooltip("Meta Quest hand tracking for swarm spread control")]
-    public HandTrackingInput handTrackingInput;
+    [Tooltip("Hand tracking mode selector - manages switching between Rate/Absolute/Hybrid modes")]
+    public HandTrackingModeSelector handTrackingSelector;
 
     // Future inputs will go here:
     // public HandIMUInput leftHandIMU;
@@ -48,8 +48,16 @@ public class InputFusionManager : MonoBehaviour
     // ============================================
     // Fused Outputs (Read-Only) - these are computed from all input sources
     public Vector3 SwarmMovement { get; private set; }      // Final movement vector for swarm (XZ plane + Y height)
-    public float SwarmSpread { get; private set; }          // Final spread/cohesion control value
+    public float SwarmSpread { get; private set; }          // Final spread control value (rate or target depending on mode)
     public float CameraRotation { get; private set; }       // Final camera rotation input
+    
+    /// <summary>
+    /// Returns true if SwarmSpread is an absolute target (not a rate)
+    /// MigrationPointController needs to know this to apply correctly
+    /// </summary>
+    public bool IsSpreadAbsolute => useFusedHandsForSpread && handTrackingSelector != null && 
+                                     handTrackingSelector.ActiveMode != null && 
+                                     handTrackingSelector.ActiveMode.IsAbsoluteMode;
 
     // Button states (pass-through from traditional for now)
     public bool SelectionNextPressed { get; private set; }
@@ -85,9 +93,14 @@ public class InputFusionManager : MonoBehaviour
             useMetaQuestForRotation = false;
         }
 
-        if (handTrackingInput == null && useFusedHandsForSpread)
+        if (handTrackingSelector == null && useFusedHandsForSpread)
         {
-            Debug.LogWarning("InputFusionManager: HandTrackingInput is enabled but reference is missing. Falling back to traditional input.");
+            Debug.LogWarning("InputFusionManager: HandTrackingModeSelector is enabled but reference is missing. Falling back to traditional input.");
+            useFusedHandsForSpread = false;
+        }
+        else if (handTrackingSelector != null && handTrackingSelector.ActiveMode == null)
+        {
+            Debug.LogWarning("InputFusionManager: HandTrackingModeSelector has no active mode. Falling back to traditional input.");
             useFusedHandsForSpread = false;
         }
     }
@@ -188,23 +201,48 @@ public class InputFusionManager : MonoBehaviour
 
     /// <summary>
     /// Combines spread control from hand tracking and/or traditional input
+    /// Note: Output meaning depends on hand tracking mode:
+    /// - RateBased: SwarmSpread is a rate (-1 to +1)
+    /// - Absolute/Hybrid: SwarmSpread is target separation distance (meters)
     /// </summary>
     void FuseSpreadInputs()
     {
         float spread = 0f;
 
         // PRIMARY: Use hand tracking if enabled and available
-        if (useFusedHandsForSpread && handTrackingInput != null)
+        if (useFusedHandsForSpread && handTrackingSelector != null && handTrackingSelector.ActiveMode != null)
         {
-            spread = handTrackingInput.HandSpreadControl;
+            HandTrackingInputBase activeMode = handTrackingSelector.ActiveMode;
+            spread = activeMode.HandSpreadControl;
+            
+            // If using Hybrid mode, apply rate limiting here
+            if (activeMode is HandTrackingHybrid hybrid)
+            {
+                spread = ApplyHybridSmoothing(spread, hybrid.maxChangeRate);
+            }
         }
-        // FALLBACK: Use traditional input (triggers/bumpers)
+        // FALLBACK: Use traditional input (triggers/bumpers - always rate-based)
         else if (traditionalInput != null)
         {
             spread = traditionalInput.SpreadInput;
         }
 
         SwarmSpread = spread;
+    }
+
+    private float _lastHybridTarget = 2.5f; // Start at mid-range
+    
+    /// <summary>
+    /// For Hybrid mode: smoothly approach target with rate limiting
+    /// </summary>
+    float ApplyHybridSmoothing(float targetSeparation, float maxRate)
+    {
+        float delta = targetSeparation - _lastHybridTarget;
+        float maxChange = maxRate * Time.deltaTime;
+        float change = Mathf.Clamp(delta, -maxChange, maxChange);
+        
+        _lastHybridTarget += change;
+        return _lastHybridTarget;
     }
 
     /// <summary>

@@ -610,11 +610,30 @@ public class MigrationPointController : MonoBehaviour
 
     void SpreadnessUpdate()
     {
-        float spreadness = inputManager != null ? inputManager.SwarmSpread : 0f;
-        if(spreadness != 0 && control_spreadness)
+        if(!control_spreadness || inputManager == null)
         {
-            swarmModel.desiredSeparation+= spreadness * Time.deltaTime * 1.3f;
+            return;
+        }
+
+        float spreadValue = inputManager.SwarmSpread;
+        
+        // Check if input is absolute (target) or rate-based
+        if (inputManager.IsSpreadAbsolute)
+        {
+            // Absolute/Hybrid mode: spreadValue is the target separation distance
+            // Set it directly (Hybrid mode already smoothed in InputFusionManager)
+            swarmModel.desiredSeparation = spreadValue;
             swarmModel.desiredSeparation = Mathf.Clamp(swarmModel.desiredSeparation, minSpreadness, maxSpreadness);
+        }
+        else
+        {
+            // Rate-based mode: spreadValue is a rate (-1 to +1)
+            // Apply rate to current separation
+            if(spreadValue != 0)
+            {
+                swarmModel.desiredSeparation += spreadValue * Time.deltaTime * 1.3f;
+                swarmModel.desiredSeparation = Mathf.Clamp(swarmModel.desiredSeparation, minSpreadness, maxSpreadness);
+            }
         }
     }
 
