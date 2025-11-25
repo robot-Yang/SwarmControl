@@ -14,8 +14,8 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Keyboard and game controller input")]
     public TraditionalInput traditionalInput;
 
-    [Tooltip("OpenZen IMU for swarm movement (forward/back/left/right)")]
-    public OpenZenMoveObject openZenIMU;
+    [Tooltip("IMU movement mode selector - manages switching between Linear/Exponential modes")]
+    public IMUMovementSelector imuMovementSelector;
 
     [Tooltip("Meta Quest headset for camera rotation (yaw)")]
     public MetaQuestInput metaQuestInput;
@@ -31,8 +31,8 @@ public class InputFusionManager : MonoBehaviour
     // INPUT PRIORITY TOGGLES
     // ============================================
     [Header("Input Priority Settings")]
-    [Tooltip("Use OpenZen IMU for swarm movement (if false, uses traditional input)")]
-    public bool useOpenZenForMovement = false; // Start with false until OpenZen is connected
+    [Tooltip("Use IMU for swarm movement (if false, uses traditional input)")]
+    public bool useIMUForMovement = false; // Start with false until IMU is connected
 
     [Tooltip("Use Meta Quest headset yaw for camera rotation (if false, uses traditional input)")]
     public bool useMetaQuestForRotation = false; // Will enable when MetaQuest is added
@@ -81,10 +81,15 @@ public class InputFusionManager : MonoBehaviour
             Debug.LogError("InputFusionManager: TraditionalInput reference is missing! Assign it in the Inspector.");
         }
 
-        if (openZenIMU == null && useOpenZenForMovement)
+        if (imuMovementSelector == null && useIMUForMovement)
         {
-            Debug.LogWarning("InputFusionManager: OpenZenIMU is enabled but reference is missing. Falling back to traditional input.");
-            useOpenZenForMovement = false;
+            Debug.LogWarning("InputFusionManager: IMUMovementSelector is enabled but reference is missing. Falling back to traditional input.");
+            useIMUForMovement = false;
+        }
+        else if (imuMovementSelector != null && imuMovementSelector.ActiveMode == null)
+        {
+            Debug.LogWarning("InputFusionManager: IMUMovementSelector has no active mode. Falling back to traditional input.");
+            useIMUForMovement = false;
         }
 
         if (metaQuestInput == null && useMetaQuestForRotation)
@@ -117,25 +122,23 @@ public class InputFusionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Combines movement from OpenZen IMU and/or traditional input
+    /// Combines movement from IMU and/or traditional input
     /// </summary>
     void FuseMovementInputs()
     {
         Vector3 movement = Vector3.zero;
 
-        // PRIMARY: Use OpenZen IMU if enabled and available
-        if (useOpenZenForMovement && openZenIMU != null)
+        // PRIMARY: Use IMU if enabled and available
+        if (useIMUForMovement && imuMovementSelector != null && imuMovementSelector.ActiveMode != null)
         {
-            movement = ConvertIMUToMovement(openZenIMU.SensorOrientation);
-            
-            // Keep height from traditional input (IMU doesn't control height yet)
-            if (traditionalInput != null)
+            IMUMovementInputBase activeMode = imuMovementSelector.ActiveMode;
+            if (activeMode.IsAvailable)
             {
-                movement.y = traditionalInput.HeightInput;
+                movement = activeMode.MovementVector;
             }
         }
         // FALLBACK: Use traditional input
-        else if (traditionalInput != null)
+        if (movement == Vector3.zero && traditionalInput != null)
         {
             Vector2 moveInput = traditionalInput.MovementInput;
             float heightInput = traditionalInput.HeightInput;
@@ -143,60 +146,6 @@ public class InputFusionManager : MonoBehaviour
         }
 
         SwarmMovement = movement;
-    }
-
-    [Header("IMU Conversion Settings")]
-    [Tooltip("Pitch angle (degrees) for maximum forward/backward speed")]
-    public float pitchDeadzone = 5f;
-    public float pitchMaxAngle = 30f;
-    
-    [Tooltip("Roll angle (degrees) for maximum left/right speed")]
-    public float rollDeadzone = 5f;
-    public float rollMaxAngle = 30f;
-
-    [Tooltip("Invert pitch direction (forward becomes backward)")]
-    public bool invertPitch = false;
-    
-    [Tooltip("Invert roll direction (left becomes right)")]
-    public bool invertRoll = false;
-
-    /// <summary>
-    /// Converts IMU sensor orientation (quaternion) to swarm movement vector.
-    /// Pitch → Forward/Backward (Z), Roll → Left/Right (X)
-    /// </summary>
-    Vector3 ConvertIMUToMovement(Quaternion imuOrientation)
-    {
-        // Convert quaternion to Euler angles (in degrees)
-        Vector3 euler = imuOrientation.eulerAngles;
-        
-        // Normalize angles to -180 to +180 range
-        float pitch = NormalizeAngle(euler.x);
-        float roll = NormalizeAngle(euler.z);
-
-        // Apply deadzones
-        if (Mathf.Abs(pitch) < pitchDeadzone) pitch = 0f;
-        if (Mathf.Abs(roll) < rollDeadzone) roll = 0f;
-
-        // Map angles to -1 to +1 range
-        float forward = Mathf.Clamp(pitch / pitchMaxAngle, -1f, 1f);
-        float right = Mathf.Clamp(roll / rollMaxAngle, -1f, 1f);
-
-        // Apply inversions if needed
-        if (invertPitch) forward = -forward;
-        if (invertRoll) right = -right;
-
-        // Return as movement vector (X=right, Y=height, Z=forward)
-        return new Vector3(right, 0f, forward);
-    }
-
-    /// <summary>
-    /// Normalizes angle from 0-360 to -180 to +180 range
-    /// </summary>
-    float NormalizeAngle(float angle)
-    {
-        if (angle > 180f)
-            return angle - 360f;
-        return angle;
     }
 
     /// <summary>
@@ -318,7 +267,7 @@ public class InputFusionManager : MonoBehaviour
         GUILayout.Label($"Spread: {SwarmSpread:F2}");
         GUILayout.Label($"Rotation: {CameraRotation:F2}");
         GUILayout.Label($"---");
-        GUILayout.Label($"OpenZen Active: {useOpenZenForMovement}");
+        GUILayout.Label($"IMU Active: {useIMUForMovement}");
         GUILayout.Label($"MetaQuest Active: {useMetaQuestForRotation}");
         GUILayout.Label($"HandTracking Active: {useFusedHandsForSpread}");
         GUILayout.Label($"Traditional Fallback: {enableTraditionalFallback}");

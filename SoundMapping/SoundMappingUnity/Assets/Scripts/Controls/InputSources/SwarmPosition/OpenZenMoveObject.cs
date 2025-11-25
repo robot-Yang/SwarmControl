@@ -22,6 +22,7 @@ public class OpenZenMoveObject : MonoBehaviour
     // Public properties for other scripts to access
     public Quaternion SensorOrientation { get; private set; }
     public Vector3 SensorAcceleration { get; private set; }
+    public Vector3 SensorEulerAngles { get; private set; }
 
     // Use this for initialization
     void Start()
@@ -100,6 +101,8 @@ public class OpenZenMoveObject : MonoBehaviour
                 
                 // Update public properties
                 SensorOrientation = new Quaternion(y - z,  x - w, -w - x, y + z); // Unity order: xyzw
+                SensorEulerAngles = SensorOrientation.eulerAngles; // Convert quaternion to Euler angles (degrees)
+                
                 if (fa != null)
                 {
                     SensorAcceleration = new Vector3(fa.getitem(0), fa.getitem(1), fa.getitem(2));
