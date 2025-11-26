@@ -23,6 +23,9 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Hand tracking mode selector - manages switching between Rate/Absolute/Hybrid modes")]
     public HandTrackingModeSelector handTrackingSelector;
 
+    [Tooltip("Hand height mode selector - manages switching between Linear/RateBased/Exponential/Logarithmic modes")]
+    public HandHeightSelector handHeightSelector;
+
     // Future inputs will go here:
     // public HandIMUInput leftHandIMU;
     // public HandIMUInput rightHandIMU;
@@ -39,6 +42,9 @@ public class InputFusionManager : MonoBehaviour
 
     [Tooltip("Use fused hand IMU + Quest arms for spread control (if false, uses traditional input)")]
     public bool useFusedHandsForSpread = false; // Will enable when hand IMUs are added
+
+    [Tooltip("Use hand height for swarm height control (if false, uses traditional input)")]
+    public bool useHandsForHeight = false; // Will enable when hand tracking is ready
 
     [Tooltip("Always allow traditional input as fallback when primary sources aren't moving")]
     public bool enableTraditionalFallback = true;
@@ -108,6 +114,17 @@ public class InputFusionManager : MonoBehaviour
             Debug.LogWarning("InputFusionManager: HandTrackingModeSelector has no active mode. Falling back to traditional input.");
             useFusedHandsForSpread = false;
         }
+
+        if (handHeightSelector == null && useHandsForHeight)
+        {
+            Debug.LogWarning("InputFusionManager: HandHeightSelector is enabled but reference is missing. Falling back to traditional input.");
+            useHandsForHeight = false;
+        }
+        else if (handHeightSelector != null && handHeightSelector.ActiveMode == null)
+        {
+            Debug.LogWarning("InputFusionManager: HandHeightSelector has no active mode. Falling back to traditional input.");
+            useHandsForHeight = false;
+        }
     }
 
     // ============================================
@@ -116,13 +133,15 @@ public class InputFusionManager : MonoBehaviour
     void Update()
     {
         FuseMovementInputs();
+        FuseHeightInputs();
         FuseSpreadInputs();
         FuseRotationInputs();
         FuseButtonInputs();
     }
 
     /// <summary>
-    /// Combines movement from IMU and/or traditional input
+    /// Combines horizontal movement (XZ plane) from IMU and/or traditional input
+    /// Height (Y) is handled separately in FuseHeightInputs()
     /// </summary>
     void FuseMovementInputs()
     {
@@ -134,18 +153,44 @@ public class InputFusionManager : MonoBehaviour
             IMUMovementInputBase activeMode = imuMovementSelector.ActiveMode;
             if (activeMode.IsAvailable)
             {
-                movement = activeMode.MovementVector;
+                movement = activeMode.MovementVector; // Already has Y=0
             }
         }
-        // FALLBACK: Use traditional input
+        // FALLBACK: Use traditional input (horizontal only)
         if (movement == Vector3.zero && traditionalInput != null)
         {
             Vector2 moveInput = traditionalInput.MovementInput;
-            float heightInput = traditionalInput.HeightInput;
-            movement = new Vector3(moveInput.x, heightInput, moveInput.y);
+            movement = new Vector3(moveInput.x, 0f, moveInput.y); // Y is handled in FuseHeightInputs
         }
 
         SwarmMovement = movement;
+    }
+
+    /// <summary>
+    /// Combines height control from hand height and/or traditional input
+    /// Updates the Y component of SwarmMovement
+    /// </summary>
+    void FuseHeightInputs()
+    {
+        float height = 0f;
+
+        // PRIMARY: Use hand height if enabled and available
+        if (useHandsForHeight && handHeightSelector != null && handHeightSelector.ActiveMode != null)
+        {
+            HandHeightInputBase activeMode = handHeightSelector.ActiveMode;
+            if (activeMode.AreHandsAvailable)
+            {
+                height = activeMode.HeightControl;
+            }
+        }
+        // FALLBACK: Use traditional input height
+        if (height == 0f && traditionalInput != null)
+        {
+            height = traditionalInput.HeightInput;
+        }
+
+        // Update the Y component of SwarmMovement
+        SwarmMovement = new Vector3(SwarmMovement.x, height, SwarmMovement.z);
     }
 
     /// <summary>
@@ -269,7 +314,8 @@ public class InputFusionManager : MonoBehaviour
         GUILayout.Label($"---");
         GUILayout.Label($"IMU Active: {useIMUForMovement}");
         GUILayout.Label($"MetaQuest Active: {useMetaQuestForRotation}");
-        GUILayout.Label($"HandTracking Active: {useFusedHandsForSpread}");
+        GUILayout.Label($"HandTracking Spread Active: {useFusedHandsForSpread}");
+        GUILayout.Label($"HandTracking Height Active: {useHandsForHeight}");
         GUILayout.Label($"Traditional Fallback: {enableTraditionalFallback}");
         GUILayout.EndArea();
     }
