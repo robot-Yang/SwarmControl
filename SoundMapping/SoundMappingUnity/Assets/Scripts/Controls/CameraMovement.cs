@@ -7,11 +7,9 @@ public class CameraMovement : MonoBehaviour
 
     public static int idLeader = -1;
 
-
     public static Vector3 forward;
     public static Vector3 right;
     public static Vector3 up;
-
 
     public static Camera cam;
     public GameObject camMinimap;
@@ -27,7 +25,12 @@ public class CameraMovement : MonoBehaviour
     private const float DEFAULT_HEIGHT_CAMERA = 20f;
 
     // A simple state machine for the camera
-    private enum CameraState { TDView, Animation, DroneView, Crash, AnimationDroneToDrone };
+    private enum CameraState { 
+        TDView, 
+        Animation, 
+        DroneView, 
+        Crash, 
+        AnimationDroneToDrone };
     private static CameraState currentState;
 
     // Animation variables (used when transitioning between states)
