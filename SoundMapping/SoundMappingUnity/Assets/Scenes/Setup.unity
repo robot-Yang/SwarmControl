@@ -2407,6 +2407,9 @@ GameObject:
   - component: {fileID: 1134678122}
   - component: {fileID: 1134678121}
   - component: {fileID: 1134678120}
+  - component: {fileID: 1134678126}
+  - component: {fileID: 1134678125}
+  - component: {fileID: 1134678124}
   m_Layer: 0
   m_Name: InputManager
   m_TagString: Untagged
@@ -2431,10 +2434,14 @@ MonoBehaviour:
   metaQuestInput: {fileID: 1134678111}
   handTrackingSelector: {fileID: 1134678113}
   handHeightSelector: {fileID: 1134678119}
+  mediaPipeSpreadInput: {fileID: 1134678124}
+  mediaPipeHeightInput: {fileID: 1134678125}
   useIMUForMovement: 0
   useMetaQuestForRotation: 0
   useFusedHandsForSpread: 0
   useHandsForHeight: 0
+  useMediaPipeForSpread: 0
+  useMediaPipeForHeight: 0
   enableTraditionalFallback: 1
 --- !u!114 &1134678108
 MonoBehaviour:
@@ -2500,9 +2507,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cameraRig: {fileID: 1940585593}
+  rotationMode: 1
   rotationSensitivity: 1
   yawDeadzone: 2
   maxRotationRate: 90
+  maxYawLeft: -90
+  maxYawRight: 90
+  neutralDeadzone: 5
+  holdDuration: 0.5
   showDebugInfo: 0
 --- !u!114 &1134678113
 MonoBehaviour:
@@ -2728,6 +2740,49 @@ MonoBehaviour:
   deadzone: 0.05
   calibrateKey: 104
   exponent: 2
+--- !u!114 &1134678124
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c6240f4fa05cef7499253243aee2afa1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  webSocketClient: {fileID: 1134678126}
+  minSwarmSeparation: 1
+  maxSwarmSeparation: 5
+  smoothing: 0.3
+--- !u!114 &1134678125
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 245bcda52c47d224090a627a065984f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  webSocketClient: {fileID: 1134678126}
+  maxVerticalSpeed: 2
+  smoothing: 0.3
+--- !u!114 &1134678126
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4260e57a32eabf24fbbbdbfd7ed30a62, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1179672691
 GameObject:
   m_ObjectHideFlags: 0
@@ -3413,7 +3468,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10.9
+  m_fontSize: 10.2
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -4847,7 +4902,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 13.8
+  m_fontSize: 13.7
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1

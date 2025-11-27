@@ -38,7 +38,6 @@ public class CameraMovement : MonoBehaviour
     private Vector3 animStartPos;
     private Vector3 animTargetPos;
 
-    
 
     void Start()
     {

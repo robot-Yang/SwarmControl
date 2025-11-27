@@ -6,18 +6,24 @@ public class WebSocketClient : MonoBehaviour
 {
     private WebSocket ws;
 
+    // Public properties for other scripts to access
+    public float HandDistance { get; private set; } = 0f;
+    public float HandHeight { get; private set; } = 0f;
+    public bool IsConnected => ws != null && ws.IsAlive;
+
     void Start()
     {
         ws = new WebSocket("ws://localhost:9052");
 
         ws.OnOpen += (sender, e) =>
         {
-            UpdateStatus("Connected to server.");
+            UpdateStatus("Connected to MediaPipe Python server.");
         };
 
         ws.OnMessage += (sender, e) =>
         {
-            Debug.Log("Message received: " + e.Data);
+            // Parse JSON data from Python
+            ParseHandData(e.Data);
         };
 
         ws.OnError += (sender, e) =>
@@ -31,12 +37,27 @@ public class WebSocketClient : MonoBehaviour
         };
 
         ws.Connect();
+    }
 
+    void ParseHandData(string jsonData)
+    {
+        try
+        {
+            MediaPipeHandData data = JsonUtility.FromJson<MediaPipeHandData>(jsonData);
+            HandDistance = data.distance;
+            HandHeight = data.height;
+            
+            // Optional: Log for debugging
+            // Debug.Log($"Received - Distance: {HandDistance:F2}, Height: {HandHeight:F2}");
+        }
+        catch (System.Exception ex)
+        {
+            Debug.LogWarning($"Failed to parse MediaPipe data: {ex.Message}");
+        }
     }
 
     void UpdateStatus(string message)
     {
-
         Debug.Log(message);
     }
 

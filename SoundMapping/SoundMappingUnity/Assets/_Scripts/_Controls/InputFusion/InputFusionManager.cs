@@ -26,6 +26,12 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Hand height mode selector - manages switching between Linear/RateBased/Exponential/Logarithmic modes")]
     public HandHeightSelector handHeightSelector;
 
+    [Tooltip("MediaPipe spread input from Python webcam tracking")]
+    public MediaPipeSpreadInput mediaPipeSpreadInput;
+
+    [Tooltip("MediaPipe height input from Python webcam tracking")]
+    public MediaPipeHeightInput mediaPipeHeightInput;
+
     // Future inputs will go here:
     // public HandIMUInput leftHandIMU;
     // public HandIMUInput rightHandIMU;
@@ -46,6 +52,12 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Use hand height for swarm height control (if false, uses traditional input)")]
     public bool useHandsForHeight = false; // Will enable when hand tracking is ready
 
+    [Tooltip("Use MediaPipe webcam tracking for spread control (overrides Quest hand tracking)")]
+    public bool useMediaPipeForSpread = false;
+
+    [Tooltip("Use MediaPipe webcam tracking for height control (overrides Quest hand height)")]
+    public bool useMediaPipeForHeight = false;
+
     [Tooltip("Always allow traditional input as fallback when primary sources aren't moving")]
     public bool enableTraditionalFallback = true;
 
@@ -61,9 +73,24 @@ public class InputFusionManager : MonoBehaviour
     /// Returns true if SwarmSpread is an absolute target (not a rate)
     /// MigrationPointController needs to know this to apply correctly
     /// </summary>
-    public bool IsSpreadAbsolute => useFusedHandsForSpread && handTrackingSelector != null && 
-                                     handTrackingSelector.ActiveMode != null && 
-                                     handTrackingSelector.ActiveMode.IsAbsoluteMode;
+    public bool IsSpreadAbsolute
+    {
+        get
+        {
+            // Check MediaPipe first (priority)
+            if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
+            {
+                return mediaPipeSpreadInput.IsAbsoluteMode;
+            }
+            // Check Quest hand tracking
+            if (useFusedHandsForSpread && handTrackingSelector != null && 
+                handTrackingSelector.ActiveMode != null)
+            {
+                return handTrackingSelector.ActiveMode.IsAbsoluteMode;
+            }
+            return false; // Traditional input is rate-based
+        }
+    }
 
     // Button states (pass-through from traditional for now)
     public bool SelectionNextPressed { get; private set; }
@@ -167,15 +194,20 @@ public class InputFusionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Combines height control from hand height and/or traditional input
+    /// Combines height control from MediaPipe, hand height, and/or traditional input
     /// Updates the Y component of SwarmMovement
     /// </summary>
     void FuseHeightInputs()
     {
         float height = 0f;
 
-        // PRIMARY: Use hand height if enabled and available
-        if (useHandsForHeight && handHeightSelector != null && handHeightSelector.ActiveMode != null)
+        // PRIORITY 1: MediaPipe webcam tracking (if enabled)
+        if (useMediaPipeForHeight && mediaPipeHeightInput != null && mediaPipeHeightInput.IsAvailable)
+        {
+            height = mediaPipeHeightInput.HeightControl;
+        }
+        // PRIORITY 2: Quest hand height if enabled and available
+        else if (useHandsForHeight && handHeightSelector != null && handHeightSelector.ActiveMode != null)
         {
             HandHeightInputBase activeMode = handHeightSelector.ActiveMode;
             if (activeMode.AreHandsAvailable)
@@ -194,8 +226,8 @@ public class InputFusionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Combines spread control from hand tracking and/or traditional input
-    /// Note: Output meaning depends on hand tracking mode:
+    /// Combines spread control from MediaPipe, hand tracking, and/or traditional input
+    /// Note: Output meaning depends on mode:
     /// - RateBased: SwarmSpread is a rate (-1 to +1)
     /// - Absolute/Hybrid: SwarmSpread is target separation distance (meters)
     /// </summary>
@@ -203,8 +235,13 @@ public class InputFusionManager : MonoBehaviour
     {
         float spread = 0f;
 
-        // PRIMARY: Use hand tracking if enabled and available
-        if (useFusedHandsForSpread && handTrackingSelector != null && handTrackingSelector.ActiveMode != null)
+        // PRIORITY 1: MediaPipe webcam tracking (if enabled)
+        if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
+        {
+            spread = mediaPipeSpreadInput.SpreadControl;
+        }
+        // PRIORITY 2: Quest hand tracking if enabled and available
+        else if (useFusedHandsForSpread && handTrackingSelector != null && handTrackingSelector.ActiveMode != null)
         {
             HandTrackingInputBase activeMode = handTrackingSelector.ActiveMode;
             spread = activeMode.HandSpreadControl;
