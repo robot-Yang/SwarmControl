@@ -5,16 +5,30 @@ import asyncio
 import websockets
 import json
 import threading
+import queue
 
 # --- WebSocket Server Setup ---
 connected_clients = set()
+message_queue = queue.Queue()  # Thread-safe queue for messages
 
-async def handle_client(websocket, path):
+async def handle_client(websocket):
     """Handle WebSocket connection from Unity"""
     connected_clients.add(websocket)
     print(f"Unity client connected. Total clients: {len(connected_clients)}")
     try:
-        await websocket.wait_closed()
+        # Keep connection alive and send queued messages
+        while True:
+            # Check for messages to send (non-blocking)
+            try:
+                message = message_queue.get_nowait()
+                await websocket.send(message)
+            except queue.Empty:
+                pass
+            
+            # Small delay to prevent busy-waiting
+            await asyncio.sleep(0.01)
+    except websockets.exceptions.ConnectionClosed:
+        pass
     finally:
         connected_clients.remove(websocket)
         print(f"Unity client disconnected. Total clients: {len(connected_clients)}")
@@ -97,16 +111,8 @@ def send_to_unity(distance_norm, height_norm):
         "height": round(height_norm, 4)
     })
     
-    # Send to all connected clients
-    disconnected = set()
-    for client in connected_clients:
-        try:
-            asyncio.run(client.send(message))
-        except:
-            disconnected.add(client)
-    
-    # Remove disconnected clients
-    connected_clients.difference_update(disconnected)
+    # Add message to queue (will be sent by async thread)
+    message_queue.put(message)
 
 print("Calibration automatique avec filtrage :")
 print("  - Place tes deux mains dans le champ.")
