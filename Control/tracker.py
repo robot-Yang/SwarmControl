@@ -2,6 +2,10 @@ import cv2
 import json
 import numpy as np
 from pathlib import Path
+import sys
+
+# Add src directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 from hand_detector import HandDetector
 from websocket_server import WebSocketServer
 
@@ -84,14 +88,16 @@ class HandTracker:
         
         # Determine range from neutral
         if raw_height < neutral:
-            # Below neutral: map min_v..neutral to -1..0
+            # Below neutral: map min_v..neutral to +1..0 (hands high = positive)
             range_size = neutral - min_v
             normalized = (raw_height - neutral) / range_size if range_size > 0 else 0.0
         else:
-            # Above neutral: map neutral..max_v to 0..+1
+            # Above neutral: map neutral..max_v to 0..-1 (hands low = negative)
             range_size = max_v - neutral
             normalized = (raw_height - neutral) / range_size if range_size > 0 else 0.0
         
+        # INVERT: hands up (small Y) should be positive
+        normalized = -normalized
         normalized = max(-1.0, min(1.0, normalized))
         
         # Apply linearization
