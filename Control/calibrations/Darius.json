@@ -1,0 +1,20 @@
+{
+    "profile_name": "Darius",
+    "description": "test",
+    "min_horizontal": 208.39467113896552,
+    "max_horizontal": 1482.4787196734515,
+    "min_vertical": 345.23917155606404,
+    "max_vertical": 985.1183880226953,
+    "neutral_vertical": 581.2238382441658,
+    "smooth_alpha": 0.2,
+    "horizontal_linearization": {
+        "type": "linear",
+        "slope": 1.0,
+        "intercept": 0.0
+    },
+    "vertical_linearization": {
+        "type": "linear",
+        "slope": 1.0,
+        "intercept": 0.0
+    }
+}

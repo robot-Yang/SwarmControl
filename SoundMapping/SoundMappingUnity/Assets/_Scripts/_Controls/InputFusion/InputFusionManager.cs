@@ -20,12 +20,6 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Meta Quest headset for camera rotation (yaw)")]
     public MetaQuestInput metaQuestInput;
 
-    [Tooltip("Hand tracking mode selector - manages switching between Rate/Absolute/Hybrid modes")]
-    public HandTrackingModeSelector handTrackingSelector;
-
-    [Tooltip("Hand height mode selector - manages switching between Linear/RateBased/Exponential/Logarithmic modes")]
-    public HandHeightSelector handHeightSelector;
-
     [Tooltip("MediaPipe spread input from Python webcam tracking")]
     public MediaPipeSpreadInput mediaPipeSpreadInput;
 
@@ -46,16 +40,10 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Use Meta Quest headset yaw for camera rotation (if false, uses traditional input)")]
     public bool useMetaQuestForRotation = false; // Will enable when MetaQuest is added
 
-    [Tooltip("Use fused hand IMU + Quest arms for spread control (if false, uses traditional input)")]
-    public bool useFusedHandsForSpread = false; // Will enable when hand IMUs are added
-
-    [Tooltip("Use hand height for swarm height control (if false, uses traditional input)")]
-    public bool useHandsForHeight = false; // Will enable when hand tracking is ready
-
-    [Tooltip("Use MediaPipe webcam tracking for spread control (overrides Quest hand tracking)")]
+    [Tooltip("Use MediaPipe webcam tracking for spread control (if false, uses traditional input)")]
     public bool useMediaPipeForSpread = false;
 
-    [Tooltip("Use MediaPipe webcam tracking for height control (overrides Quest hand height)")]
+    [Tooltip("Use MediaPipe webcam tracking for height control (if false, uses traditional input)")]
     public bool useMediaPipeForHeight = false;
 
     [Tooltip("Always allow traditional input as fallback when primary sources aren't moving")]
@@ -77,16 +65,10 @@ public class InputFusionManager : MonoBehaviour
     {
         get
         {
-            // Check MediaPipe first (priority)
+            // MediaPipe provides absolute target values
             if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
             {
                 return mediaPipeSpreadInput.IsAbsoluteMode;
-            }
-            // Check Quest hand tracking
-            if (useFusedHandsForSpread && handTrackingSelector != null && 
-                handTrackingSelector.ActiveMode != null)
-            {
-                return handTrackingSelector.ActiveMode.IsAbsoluteMode;
             }
             return false; // Traditional input is rate-based
         }
@@ -131,26 +113,16 @@ public class InputFusionManager : MonoBehaviour
             useMetaQuestForRotation = false;
         }
 
-        if (handTrackingSelector == null && useFusedHandsForSpread)
+        if (mediaPipeSpreadInput == null && useMediaPipeForSpread)
         {
-            Debug.LogWarning("InputFusionManager: HandTrackingModeSelector is enabled but reference is missing. Falling back to traditional input.");
-            useFusedHandsForSpread = false;
-        }
-        else if (handTrackingSelector != null && handTrackingSelector.ActiveMode == null)
-        {
-            Debug.LogWarning("InputFusionManager: HandTrackingModeSelector has no active mode. Falling back to traditional input.");
-            useFusedHandsForSpread = false;
+            Debug.LogWarning("InputFusionManager: MediaPipeSpreadInput is enabled but reference is missing. Falling back to traditional input.");
+            useMediaPipeForSpread = false;
         }
 
-        if (handHeightSelector == null && useHandsForHeight)
+        if (mediaPipeHeightInput == null && useMediaPipeForHeight)
         {
-            Debug.LogWarning("InputFusionManager: HandHeightSelector is enabled but reference is missing. Falling back to traditional input.");
-            useHandsForHeight = false;
-        }
-        else if (handHeightSelector != null && handHeightSelector.ActiveMode == null)
-        {
-            Debug.LogWarning("InputFusionManager: HandHeightSelector has no active mode. Falling back to traditional input.");
-            useHandsForHeight = false;
+            Debug.LogWarning("InputFusionManager: MediaPipeHeightInput is enabled but reference is missing. Falling back to traditional input.");
+            useMediaPipeForHeight = false;
         }
     }
 
@@ -194,29 +166,20 @@ public class InputFusionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Combines height control from MediaPipe, hand height, and/or traditional input
+    /// Combines height control from MediaPipe and/or traditional input
     /// Updates the Y component of SwarmMovement
     /// </summary>
     void FuseHeightInputs()
     {
         float height = 0f;
 
-        // PRIORITY 1: MediaPipe webcam tracking (if enabled)
+        // PRIMARY: MediaPipe webcam tracking (if enabled and available)
         if (useMediaPipeForHeight && mediaPipeHeightInput != null && mediaPipeHeightInput.IsAvailable)
         {
             height = mediaPipeHeightInput.HeightControl;
         }
-        // PRIORITY 2: Quest hand height if enabled and available
-        else if (useHandsForHeight && handHeightSelector != null && handHeightSelector.ActiveMode != null)
-        {
-            HandHeightInputBase activeMode = handHeightSelector.ActiveMode;
-            if (activeMode.AreHandsAvailable)
-            {
-                height = activeMode.HeightControl;
-            }
-        }
         // FALLBACK: Use traditional input height
-        if (height == 0f && traditionalInput != null)
+        else if (traditionalInput != null)
         {
             height = traditionalInput.HeightInput;
         }
@@ -226,31 +189,19 @@ public class InputFusionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Combines spread control from MediaPipe, hand tracking, and/or traditional input
+    /// Combines spread control from MediaPipe and/or traditional input
     /// Note: Output meaning depends on mode:
-    /// - RateBased: SwarmSpread is a rate (-1 to +1)
-    /// - Absolute/Hybrid: SwarmSpread is target separation distance (meters)
+    /// - Traditional: SwarmSpread is a rate (-1 to +1)
+    /// - MediaPipe: SwarmSpread is target separation distance (meters)
     /// </summary>
     void FuseSpreadInputs()
     {
         float spread = 0f;
 
-        // PRIORITY 1: MediaPipe webcam tracking (if enabled)
+        // PRIMARY: MediaPipe webcam tracking (if enabled and available)
         if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
         {
             spread = mediaPipeSpreadInput.SpreadControl;
-        }
-        // PRIORITY 2: Quest hand tracking if enabled and available
-        else if (useFusedHandsForSpread && handTrackingSelector != null && handTrackingSelector.ActiveMode != null)
-        {
-            HandTrackingInputBase activeMode = handTrackingSelector.ActiveMode;
-            spread = activeMode.HandSpreadControl;
-            
-            // If using Hybrid mode, apply rate limiting here
-            if (activeMode is HandTrackingHybrid hybrid)
-            {
-                spread = ApplyHybridSmoothing(spread, hybrid.maxChangeRate);
-            }
         }
         // FALLBACK: Use traditional input (triggers/bumpers - always rate-based)
         else if (traditionalInput != null)
@@ -259,21 +210,6 @@ public class InputFusionManager : MonoBehaviour
         }
 
         SwarmSpread = spread;
-    }
-
-    private float _lastHybridTarget = 2.5f; // Start at mid-range
-    
-    /// <summary>
-    /// For Hybrid mode: smoothly approach target with rate limiting
-    /// </summary>
-    float ApplyHybridSmoothing(float targetSeparation, float maxRate)
-    {
-        float delta = targetSeparation - _lastHybridTarget;
-        float maxChange = maxRate * Time.deltaTime;
-        float change = Mathf.Clamp(delta, -maxChange, maxChange);
-        
-        _lastHybridTarget += change;
-        return _lastHybridTarget;
     }
 
     /// <summary>
@@ -351,8 +287,8 @@ public class InputFusionManager : MonoBehaviour
         GUILayout.Label($"---");
         GUILayout.Label($"IMU Active: {useIMUForMovement}");
         GUILayout.Label($"MetaQuest Active: {useMetaQuestForRotation}");
-        GUILayout.Label($"HandTracking Spread Active: {useFusedHandsForSpread}");
-        GUILayout.Label($"HandTracking Height Active: {useHandsForHeight}");
+        GUILayout.Label($"MediaPipe Spread Active: {useMediaPipeForSpread}");
+        GUILayout.Label($"MediaPipe Height Active: {useMediaPipeForHeight}");
         GUILayout.Label($"Traditional Fallback: {enableTraditionalFallback}");
         GUILayout.EndArea();
     }

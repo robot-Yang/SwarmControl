@@ -2,7 +2,6 @@ import asyncio
 import websockets
 import json
 import threading
-import queue
 
 class WebSocketServer:
     """WebSocket server for sending tracking data to Unity"""
@@ -11,7 +10,7 @@ class WebSocketServer:
         self.host = host
         self.port = port
         self.connected_clients = set()
-        self.message_queue = queue.Queue()
+        self.current_message = None
         self.server_thread = None
         self.loop = None
     
@@ -22,12 +21,9 @@ class WebSocketServer:
         
         try:
             while True:
-                # Check for messages to send (non-blocking)
-                try:
-                    message = self.message_queue.get_nowait()
-                    await websocket.send(message)
-                except queue.Empty:
-                    pass
+                # Send current message to this client if available
+                if self.current_message:
+                    await websocket.send(self.current_message)
                 
                 # Small delay to prevent busy-waiting
                 await asyncio.sleep(0.01)
@@ -64,7 +60,8 @@ class WebSocketServer:
             "height": round(height, 4)
         })
         
-        self.message_queue.put(message)
+        # Update current message - all clients will pick it up
+        self.current_message = message
     
     def get_client_count(self):
         """Get number of connected Unity clients"""

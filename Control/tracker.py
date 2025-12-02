@@ -12,7 +12,7 @@ from websocket_server import WebSocketServer
 # ============================================
 # CHOOSE YOUR CALIBRATION PROFILE HERE
 # ============================================
-CALIBRATION_PROFILE = "gabriel"  # Change this to switch profiles
+CALIBRATION_PROFILE = "Darius"  # Change this to switch profiles
 # ============================================
 
 class HandTracker:
@@ -176,6 +176,9 @@ def main():
                 distance=result['distance_normalized'],
                 height=result['height_normalized']
             )
+            
+            # Debug: Print values being sent
+            print(f"RAW: distance={result['raw_distance']:.1f}px height={result['raw_height']:.1f}px | NORMALIZED: distance={result['distance_normalized']:.3f} height={result['height_normalized']:.3f} | Clients={ws_server.get_client_count()}")
             
             # Display values
             cv2.putText(frame, f"Spread: {result['distance_normalized']:.3f} (0..1)", 
