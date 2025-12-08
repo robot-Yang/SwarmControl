@@ -20,6 +20,9 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Meta Quest headset for camera rotation (yaw)")]
     public MetaQuestInput metaQuestInput;
 
+    [Tooltip("IMU yaw input for camera rotation from OpenZen sensor")]
+    public IMUYawInput imuYawInput;
+
     [Tooltip("MediaPipe spread input from Python webcam tracking")]
     public MediaPipeSpreadInput mediaPipeSpreadInput;
 
@@ -39,6 +42,9 @@ public class InputFusionManager : MonoBehaviour
 
     [Tooltip("Use Meta Quest headset yaw for camera rotation (if false, uses traditional input)")]
     public bool useMetaQuestForRotation = false; // Will enable when MetaQuest is added
+
+    [Tooltip("Use IMU yaw for camera rotation (if false, falls back to MetaQuest or traditional)")]
+    public bool useIMUForRotation = false;
 
     [Tooltip("Use MediaPipe webcam tracking for spread control (if false, uses traditional input)")]
     public bool useMediaPipeForSpread = false;
@@ -213,14 +219,20 @@ public class InputFusionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Combines rotation from Meta Quest headset and/or traditional input
+    /// Combines rotation from IMU, Meta Quest headset, and/or traditional input
+    /// Priority: IMU > MetaQuest > Traditional
     /// </summary>
     void FuseRotationInputs()
     {
         float rotation = 0f;
 
-        // PRIMARY: Use Meta Quest headset yaw if enabled and available
-        if (useMetaQuestForRotation && metaQuestInput != null)
+        // PRIORITY 1: IMU yaw if enabled and available
+        if (useIMUForRotation && imuYawInput != null && imuYawInput.IsAvailable)
+        {
+            rotation = imuYawInput.YawRotationRate;
+        }
+        // PRIORITY 2: Meta Quest headset yaw if enabled and available
+        else if (useMetaQuestForRotation && metaQuestInput != null)
         {
             rotation = metaQuestInput.HeadsetYawRate;
         }

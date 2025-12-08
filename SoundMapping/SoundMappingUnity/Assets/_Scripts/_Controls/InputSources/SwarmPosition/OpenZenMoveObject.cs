@@ -23,6 +23,7 @@ public class OpenZenMoveObject : MonoBehaviour
     public Quaternion SensorOrientation { get; private set; }
     public Vector3 SensorAcceleration { get; private set; }
     public Vector3 SensorEulerAngles { get; private set; }
+    public Vector3 SensorEulerAnglesDirect { get; private set; } // Direct from sensor (not from quaternion)
 
     // Use this for initialization
     void Start()
@@ -66,6 +67,10 @@ public class OpenZenMoveObject : MonoBehaviour
             OpenZen.ZenSensorComponentSetBoolProperty(mZenHandle, mSensorHandle, mComponent,
                (int)EZenImuProperty.ZenImuProperty_OutputQuat, true);
 
+            // Enable Euler angle output directly from sensor
+            OpenZen.ZenSensorComponentSetBoolProperty(mZenHandle, mSensorHandle, mComponent,
+               (int)EZenImuProperty.ZenImuProperty_OutputEuler, true);
+
             print("Sensor configuration complete");
         }
     }
@@ -86,6 +91,8 @@ public class OpenZenMoveObject : MonoBehaviour
                 OpenZenFloatArray fq = OpenZenFloatArray.frompointer(zenEvent.data.imuData.q);
                 // read acceleration
                 OpenZenFloatArray fa = OpenZenFloatArray.frompointer(zenEvent.data.imuData.a);
+                // read euler angles directly from sensor
+                OpenZenFloatArray fr = OpenZenFloatArray.frompointer(zenEvent.data.imuData.r);
 
                 // Unity converts the model to left-handed by flipping the direction of X.
                 // The "LPMS World Frame" is +Z up and right-handed, Unity's is +Y up and left-handed.
@@ -106,6 +113,16 @@ public class OpenZenMoveObject : MonoBehaviour
                 if (fa != null)
                 {
                     SensorAcceleration = new Vector3(fa.getitem(0), fa.getitem(1), fa.getitem(2));
+                }
+
+                // Read direct Euler angles from sensor (in degrees)
+                if (fr != null)
+                {
+                    // OpenZen format: r[0]=roll, r[1]=pitch, r[2]=yaw (in degrees)
+                    float roll = fr.getitem(0);
+                    float pitch = fr.getitem(1);
+                    float yaw = fr.getitem(2);
+                    SensorEulerAnglesDirect = new Vector3(pitch, yaw, roll); // Unity format: (X=pitch, Y=yaw, Z=roll)
                 }
 
                 // Apply to local object (optional, good for debugging)

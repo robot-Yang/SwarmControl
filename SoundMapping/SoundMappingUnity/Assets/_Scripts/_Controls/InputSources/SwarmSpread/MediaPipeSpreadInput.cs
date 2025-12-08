@@ -15,7 +15,7 @@ public class MediaPipeSpreadInput : MonoBehaviour
     public float minSwarmSeparation = 1.0f;
     
     [Tooltip("Maximum swarm separation (meters) at distance=1")]
-    public float maxSwarmSeparation = 5.0f;
+    public float maxSwarmSeparation = 10.0f;
 
     [Header("Smoothing")]
     [Tooltip("Smoothing factor (0 = no smoothing, 1 = max smoothing)")]

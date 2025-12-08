@@ -8,9 +8,17 @@ using UnityEngine;
 public class IMUMovementLinear : IMUMovementInputBase
 {
     /// <summary>
-    /// Linear mapping: output = input
+    /// Linear mapping for pitch: output = input
     /// </summary>
-    protected override float ApplyMappingCurve(float normalizedInput)
+    protected override float ApplyPitchMappingCurve(float normalizedInput)
+    {
+        return normalizedInput;
+    }
+
+    /// <summary>
+    /// Linear mapping for roll: output = input
+    /// </summary>
+    protected override float ApplyRollMappingCurve(float normalizedInput)
     {
         return normalizedInput;
     }

@@ -30,13 +30,17 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     public bool invertPitch = false;
     
     [Tooltip("Invert roll direction (left becomes right)")]
-    public bool invertRoll = false;
+    public bool invertRoll = true;
 
     [Header("Calibration")]
     [Tooltip("Press this key to calibrate neutral position")]
     public KeyCode calibrateKey = KeyCode.C;
+
+    [Tooltip("Automatically calibrate neutral position on Start")]
+    public bool autoCalibrateOnStart = true;
     
     private Vector3 _calibrationOffset = Vector3.zero;
+    private bool _initialized = false;
 
     // ============================================
     // OUTPUT PROPERTIES
@@ -59,7 +63,14 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     
     void Update()
     {
-        // Handle calibration input
+        // Auto-calibrate on first frame if enabled
+        if (!_initialized && IsAvailable && autoCalibrateOnStart)
+        {
+            CalibrateNeutral();
+            _initialized = true;
+        }
+
+        // Handle manual calibration input
         if (Input.GetKeyDown(calibrateKey))
         {
             CalibrateNeutral();
@@ -90,6 +101,7 @@ public abstract class IMUMovementInputBase : MonoBehaviour
         // Normalize angles to -180 to +180 range
         float pitch = NormalizeAngle(eulerAngles.x);
         float roll = NormalizeAngle(eulerAngles.z);
+        float yaw = NormalizeAngle(eulerAngles.y); 
 
         // Apply deadzones
         if (Mathf.Abs(pitch) < pitchDeadzone) pitch = 0f;
@@ -100,8 +112,9 @@ public abstract class IMUMovementInputBase : MonoBehaviour
         float rollNormalized = Mathf.Clamp01(Mathf.Abs(roll) / rollMaxAngle);
 
         // Apply the specific mapping curve (implemented by derived class)
-        float forwardMapped = ApplyMappingCurve(pitchNormalized);
-        float rightMapped = ApplyMappingCurve(rollNormalized);
+        // Separate curves for pitch and roll allow independent tuning
+        float forwardMapped = ApplyPitchMappingCurve(pitchNormalized);
+        float rightMapped = ApplyRollMappingCurve(rollNormalized);
 
         // Restore sign and apply inversions
         float forward = Mathf.Sign(pitch) * forwardMapped;
@@ -115,10 +128,16 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     }
 
     /// <summary>
-    /// Maps normalized input (0-1) to output (0-1) using the specific curve.
+    /// Maps normalized pitch input (0-1) to forward/backward output using the specific curve.
     /// Must be implemented by derived classes.
     /// </summary>
-    protected abstract float ApplyMappingCurve(float normalizedInput);
+    protected abstract float ApplyPitchMappingCurve(float normalizedInput);
+
+    /// <summary>
+    /// Maps normalized roll input (0-1) to left/right output using the specific curve.
+    /// Must be implemented by derived classes.
+    /// </summary>
+    protected abstract float ApplyRollMappingCurve(float normalizedInput);
 
     /// <summary>
     /// Normalizes angle from 0-360 range to -180 to +180 range

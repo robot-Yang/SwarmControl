@@ -7,17 +7,27 @@ using UnityEngine;
 /// </summary>
 public class IMUMovementRateBased : IMUMovementInputBase
 {
-    [Header("Rate-Based Settings")]
-    [Tooltip("Maximum movement speed (units/second) at full tilt")]
-    public float maxSpeed = 2.0f;
+    [Header("Forward/Backward Speed")]
+    [Tooltip("Maximum forward/backward speed (units/second) at full pitch tilt")]
+    public float maxPitchSpeed = 4.0f;
+
+    [Header("Left/Right Speed")]
+    [Tooltip("Maximum left/right speed (units/second) at full roll tilt")]
+    public float maxRollSpeed = 4.0f;
 
     /// <summary>
-    /// Linear mapping, but output represents velocity rate
-    /// The movement vector will be multiplied by Time.deltaTime by consumers
+    /// Linear mapping for pitch (forward/backward)
     /// </summary>
-    protected override float ApplyMappingCurve(float normalizedInput)
+    protected override float ApplyPitchMappingCurve(float normalizedInput)
     {
-        // Linear rate: directly proportional to tilt angle
-        return normalizedInput * maxSpeed;
+        return normalizedInput * maxPitchSpeed;
+    }
+
+    /// <summary>
+    /// Linear mapping for roll (left/right)
+    /// </summary>
+    protected override float ApplyRollMappingCurve(float normalizedInput)
+    {
+        return normalizedInput * maxRollSpeed;
     }
 }

@@ -15,7 +15,7 @@ public class IMUMovementSelector : MonoBehaviour
 
     [Header("Mode Selection")]
     [Tooltip("Select which IMU movement control mode to use")]
-    public IMUMovementMode selectedMode = IMUMovementMode.Linear;
+    public IMUMovementMode selectedMode = IMUMovementMode.RateBased;
 
     [Header("Mode References")]
     [Tooltip("Linear mapping mode component")]
