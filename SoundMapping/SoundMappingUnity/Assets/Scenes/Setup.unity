@@ -2410,6 +2410,9 @@ GameObject:
   - component: {fileID: 1134678126}
   - component: {fileID: 1134678125}
   - component: {fileID: 1134678124}
+  - component: {fileID: 1134678129}
+  - component: {fileID: 1134678128}
+  - component: {fileID: 1134678127}
   m_Layer: 0
   m_Name: InputManager
   m_TagString: Untagged
@@ -2430,7 +2433,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   traditionalInput: {fileID: 1134678109}
-  imuMovementSelector: {fileID: 0}
+  imuMovementSelector: {fileID: 1134678129}
   metaQuestInput: {fileID: 1134678111}
   handTrackingSelector: {fileID: 1134678113}
   handHeightSelector: {fileID: 1134678119}
@@ -2783,6 +2786,63 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4260e57a32eabf24fbbbdbfd7ed30a62, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+--- !u!114 &1134678127
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0e953db5e3bc164ea2ed77d20b98cef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  openZenIMU: {fileID: 1134678108}
+  pitchMaxAngle: 30
+  rollMaxAngle: 30
+  pitchDeadzone: 5
+  rollDeadzone: 5
+  invertPitch: 0
+  invertRoll: 0
+  calibrateKey: 99
+  maxSpeed: 2
+--- !u!114 &1134678128
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 31f7dd5ae661f7e43b30a9dfa706307e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  openZenIMU: {fileID: 0}
+  pitchMaxAngle: 30
+  rollMaxAngle: 30
+  pitchDeadzone: 5
+  rollDeadzone: 5
+  invertPitch: 0
+  invertRoll: 0
+  calibrateKey: 99
+--- !u!114 &1134678129
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0816e79338e33b4095131c019ca7ec5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  selectedMode: 0
+  linearMode: {fileID: 1134678128}
+  exponentialMode: {fileID: 0}
+  rateBasedMode: {fileID: 1134678127}
 --- !u!1 &1179672691
 GameObject:
   m_ObjectHideFlags: 0
