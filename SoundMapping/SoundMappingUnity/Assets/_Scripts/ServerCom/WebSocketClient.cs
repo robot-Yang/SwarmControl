@@ -47,12 +47,13 @@ public class WebSocketClient : MonoBehaviour
             HandDistance = data.distance;
             HandHeight = data.height;
             
-            // Optional: Log for debugging
-            // Debug.Log($"Received - Distance: {HandDistance:F2}, Height: {HandHeight:F2}");
+            // Debug logging enabled
+            Debug.Log($"Received - Distance: {HandDistance:F2}, Height: {HandHeight:F2}");
         }
         catch (System.Exception ex)
         {
             Debug.LogWarning($"Failed to parse MediaPipe data: {ex.Message}");
+            Debug.LogWarning($"Raw JSON: {jsonData}");
         }
     }
 
