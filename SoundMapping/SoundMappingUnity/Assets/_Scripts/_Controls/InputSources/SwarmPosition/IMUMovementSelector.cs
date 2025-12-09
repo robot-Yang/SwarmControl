@@ -128,4 +128,27 @@ public class IMUMovementSelector : MonoBehaviour
             SwitchToMode(selectedMode);
         }
     }
+
+    // ============================================
+    // DEBUG DISPLAY
+    // ============================================
+
+    void OnGUI()
+    {
+        if (ActiveMode == null || !ActiveMode.IsAvailable) return;
+
+        // Display IMU angles in top-right corner
+        GUIStyle style = new GUIStyle();
+        style.fontSize = 14;
+        style.normal.textColor = Color.white;
+        style.alignment = TextAnchor.UpperRight;
+
+        float x = Screen.width - 200;
+        float y = 10;
+        float lineHeight = 20;
+
+        GUI.Label(new Rect(x, y, 190, 20), $"Pitch: {ActiveMode.GetPitchAngle():F1}°", style);
+        GUI.Label(new Rect(x, y + lineHeight, 190, 20), $"Roll: {ActiveMode.GetRollAngle():F1}°", style);
+        GUI.Label(new Rect(x, y + lineHeight * 2, 190, 20), $"Yaw: {ActiveMode.GetYawAngle():F1}° (display only)", style);
+    }
 }

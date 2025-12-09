@@ -21,11 +21,11 @@ public class IMUYawInput : MonoBehaviour
     public float maxRotationSpeed = 2.0f;
 
     [Tooltip("Invert yaw direction (left becomes right)")]
-    public bool invertYaw = false;
+    public bool invertYaw = true;
 
     [Header("Calibration")]
     [Tooltip("Press this key to calibrate neutral yaw position")]
-    public KeyCode calibrateKey = KeyCode.V;
+    public KeyCode calibrateKey = KeyCode.K;
 
     [Header("Auto-Calibration")]
     [Tooltip("Automatically calibrate neutral position on Start")]

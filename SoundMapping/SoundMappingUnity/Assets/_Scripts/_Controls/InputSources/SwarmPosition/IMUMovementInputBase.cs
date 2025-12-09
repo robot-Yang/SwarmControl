@@ -36,6 +36,7 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     [Tooltip("Press this key to calibrate neutral position")]
     public KeyCode calibrateKey = KeyCode.C;
 
+    [Header("Auto-Calibration")]
     [Tooltip("Automatically calibrate neutral position on Start")]
     public bool autoCalibrateOnStart = true;
     
@@ -193,5 +194,17 @@ public abstract class IMUMovementInputBase : MonoBehaviour
         float roll = NormalizeAngle(calibratedAngles.z);
         if (Mathf.Abs(roll) < rollDeadzone) roll = 0f;
         return roll;
+    }
+
+    /// <summary>
+    /// Returns current yaw angle (for display purposes only - NOT used for control)
+    /// </summary>
+    public float GetYawAngle()
+    {
+        if (!IsAvailable) return 0f;
+        
+        Vector3 calibratedAngles = openZenIMU.SensorEulerAngles - _calibrationOffset;
+        float yaw = NormalizeAngle(calibratedAngles.y);
+        return yaw;
     }
 }

@@ -291,17 +291,17 @@ public class InputFusionManager : MonoBehaviour
         if (!Application.isPlaying) return;
 
         // Display current input state in top-left corner (for debugging)
-        GUILayout.BeginArea(new Rect(10, 10, 300, 250));
-        GUILayout.Label($"<b>Input Fusion Status</b>");
+        //GUILayout.BeginArea(new Rect(10, 10, 300, 250));
+        //GUILayout.Label($"<b>Input Fusion Status</b>");
         GUILayout.Label($"Movement: {SwarmMovement}");
-        GUILayout.Label($"Spread: {SwarmSpread:F2}");
+        //GUILayout.Label($"Spread: {SwarmSpread:F2}");
         GUILayout.Label($"Rotation: {CameraRotation:F2}");
-        GUILayout.Label($"---");
-        GUILayout.Label($"IMU Active: {useIMUForMovement}");
-        GUILayout.Label($"MetaQuest Active: {useMetaQuestForRotation}");
-        GUILayout.Label($"MediaPipe Spread Active: {useMediaPipeForSpread}");
-        GUILayout.Label($"MediaPipe Height Active: {useMediaPipeForHeight}");
-        GUILayout.Label($"Traditional Fallback: {enableTraditionalFallback}");
-        GUILayout.EndArea();
+        //GUILayout.Label($"---");
+        //GUILayout.Label($"IMU Active: {useIMUForMovement}");
+        //GUILayout.Label($"MetaQuest Active: {useMetaQuestForRotation}");
+        //GUILayout.Label($"MediaPipe Spread Active: {useMediaPipeForSpread}");
+        //GUILayout.Label($"MediaPipe Height Active: {useMediaPipeForHeight}");
+        //GUILayout.Label($"Traditional Fallback: {enableTraditionalFallback}");
+        //GUILayout.EndArea();
     }
 }
