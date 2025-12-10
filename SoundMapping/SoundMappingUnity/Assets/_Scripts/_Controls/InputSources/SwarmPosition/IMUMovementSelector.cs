@@ -137,18 +137,22 @@ public class IMUMovementSelector : MonoBehaviour
     {
         if (ActiveMode == null || !ActiveMode.IsAvailable) return;
 
-        // Display IMU angles in top-right corner
+        // Get raw OpenZen Euler angles (direct from sensor)
+        Vector3 rawEuler = ActiveMode.openZenIMU.SensorEulerAnglesDirect;
+
+        // Display raw IMU angles in top-right corner
         GUIStyle style = new GUIStyle();
-        style.fontSize = 14;
-        style.normal.textColor = Color.white;
+        style.fontSize = 16;
+        style.normal.textColor = Color.yellow;
         style.alignment = TextAnchor.UpperRight;
 
-        float x = Screen.width - 200;
+        float x = Screen.width - 250;
         float y = 10;
-        float lineHeight = 20;
+        float lineHeight = 22;
 
-        //GUI.Label(new Rect(x, y, 190, 20), $"Pitch: {ActiveMode.GetPitchAngle():F1}°", style);
-        //GUI.Label(new Rect(x, y + lineHeight, 190, 20), $"Roll: {ActiveMode.GetRollAngle():F1}°", style);
-        //GUI.Label(new Rect(x, y + lineHeight * 2, 190, 20), $"Yaw: {ActiveMode.GetYawAngle():F1}° (display only)", style);
+        GUI.Label(new Rect(x, y, 240, 22), "=== RAW OPENZEN VALUES ===", style);
+        GUI.Label(new Rect(x, y + lineHeight, 240, 22), $"Pitch: {rawEuler.x:F2}°", style);
+        GUI.Label(new Rect(x, y + lineHeight * 2, 240, 22), $"Yaw: {rawEuler.y:F2}°", style);
+        GUI.Label(new Rect(x, y + lineHeight * 3, 240, 22), $"Roll: {rawEuler.z:F2}°", style);
     }
 }
