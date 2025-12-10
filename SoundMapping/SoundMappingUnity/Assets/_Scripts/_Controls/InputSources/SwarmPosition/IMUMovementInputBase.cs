@@ -37,8 +37,8 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     public KeyCode calibrateKey = KeyCode.C;
 
     [Header("Auto-Calibration")]
-    [Tooltip("Automatically calibrate neutral position on Start")]
-    public bool autoCalibrateOnStart = true;
+    [Tooltip("Automatically calibrate neutral position on Start (not needed if OpenZenMoveObject already calibrates)")]
+    public bool autoCalibrateOnStart = false;
     
     private Vector3 _calibrationOffset = Vector3.zero;
     private bool _initialized = false;
@@ -79,9 +79,12 @@ public abstract class IMUMovementInputBase : MonoBehaviour
 
         if (IsAvailable)
         {
-            Vector3 rawAngles = openZenIMU.SensorEulerAngles;
-            Vector3 calibratedAngles = rawAngles - _calibrationOffset;
-            MovementVector = ConvertIMUToMovement(calibratedAngles);
+            // Use direct sensor angles (already calibrated by OpenZenMoveObject)
+            Vector3 angles = openZenIMU.SensorEulerAnglesDirect;
+            // Apply optional second-layer calibration if enabled
+            if (autoCalibrateOnStart || _calibrationOffset != Vector3.zero)
+                angles -= _calibrationOffset;
+            MovementVector = ConvertIMUToMovement(angles);
         }
         else
         {
@@ -100,6 +103,7 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     Vector3 ConvertIMUToMovement(Vector3 eulerAngles)
     {
         // Normalize angles to -180 to +180 range
+        // SWAPPED: Roll controls forward/back, Pitch controls left/right
         float pitch = NormalizeAngle(eulerAngles.x);
         float roll = NormalizeAngle(eulerAngles.z);
         float yaw = NormalizeAngle(eulerAngles.y); 
@@ -113,16 +117,17 @@ public abstract class IMUMovementInputBase : MonoBehaviour
         float rollNormalized = Mathf.Clamp01(Mathf.Abs(roll) / rollMaxAngle);
 
         // Apply the specific mapping curve (implemented by derived class)
-        // Separate curves for pitch and roll allow independent tuning
-        float forwardMapped = ApplyPitchMappingCurve(pitchNormalized);
-        float rightMapped = ApplyRollMappingCurve(rollNormalized);
+        // SWAPPED: Pitch uses roll curve, Roll uses pitch curve
+        float forwardMapped = ApplyRollMappingCurve(rollNormalized);   // Roll → Forward/Back
+        float rightMapped = ApplyPitchMappingCurve(pitchNormalized);   // Pitch → Left/Right
 
         // Restore sign and apply inversions
-        float forward = Mathf.Sign(pitch) * forwardMapped;
-        float right = Mathf.Sign(roll) * rightMapped;
+        // SWAPPED: Roll controls forward, Pitch controls right
+        float forward = Mathf.Sign(roll) * forwardMapped;
+        float right = Mathf.Sign(pitch) * rightMapped;
 
-        if (invertPitch) forward = -forward;
-        if (invertRoll) right = -right;
+        if (invertPitch) forward = -forward;  // Now affects forward/back
+        if (invertRoll) right = -right;        // Now affects left/right
 
         // Return as movement vector (X=right, Y=height, Z=forward)
         return new Vector3(right, 0f, forward);
@@ -157,7 +162,8 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     {
         if (IsAvailable)
         {
-            _calibrationOffset = openZenIMU.SensorEulerAngles;
+            // Use direct sensor angles for calibration
+            _calibrationOffset = openZenIMU.SensorEulerAnglesDirect;
             Debug.Log($"IMU Calibrated. Neutral position offset: {_calibrationOffset}");
         }
         else
@@ -177,7 +183,8 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     {
         if (!IsAvailable) return 0f;
         
-        Vector3 calibratedAngles = openZenIMU.SensorEulerAngles - _calibrationOffset;
+        // Use direct sensor angles
+        Vector3 calibratedAngles = openZenIMU.SensorEulerAnglesDirect - _calibrationOffset;
         float pitch = NormalizeAngle(calibratedAngles.x);
         if (Mathf.Abs(pitch) < pitchDeadzone) pitch = 0f;
         return pitch;
@@ -190,7 +197,8 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     {
         if (!IsAvailable) return 0f;
         
-        Vector3 calibratedAngles = openZenIMU.SensorEulerAngles - _calibrationOffset;
+        // Use direct sensor angles
+        Vector3 calibratedAngles = openZenIMU.SensorEulerAnglesDirect - _calibrationOffset;
         float roll = NormalizeAngle(calibratedAngles.z);
         if (Mathf.Abs(roll) < rollDeadzone) roll = 0f;
         return roll;
@@ -203,7 +211,8 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     {
         if (!IsAvailable) return 0f;
         
-        Vector3 calibratedAngles = openZenIMU.SensorEulerAngles - _calibrationOffset;
+        // Use direct sensor angles
+        Vector3 calibratedAngles = openZenIMU.SensorEulerAnglesDirect - _calibrationOffset;
         float yaw = NormalizeAngle(calibratedAngles.y);
         return yaw;
     }

@@ -12,7 +12,7 @@ public class IMUYawInput : MonoBehaviour
 
     [Header("Yaw Settings")]
     [Tooltip("Yaw angle (degrees) that produces maximum rotation speed")]
-    public float yawMaxAngle = 75f;
+    public float yawMaxAngle = 30f;
 
     [Tooltip("Ignore yaw angles smaller than this (degrees)")]
     public float yawDeadzone = 5f;
@@ -21,15 +21,15 @@ public class IMUYawInput : MonoBehaviour
     public float maxRotationSpeed = 2.0f;
 
     [Tooltip("Invert yaw direction (left becomes right)")]
-    public bool invertYaw = true;
+    public bool invertYaw = false;
 
     [Header("Calibration")]
     [Tooltip("Press this key to calibrate neutral yaw position")]
     public KeyCode calibrateKey = KeyCode.K;
 
     [Header("Auto-Calibration")]
-    [Tooltip("Automatically calibrate neutral position on Start")]
-    public bool autoCalibrateOnStart = true;
+    [Tooltip("Automatically calibrate neutral position on Start (not needed - OpenZenMoveObject handles all calibration)")]
+    public bool autoCalibrateOnStart = false;
 
     [Header("Debug")]
     public bool showDebugInfo = false;
@@ -58,14 +58,7 @@ public class IMUYawInput : MonoBehaviour
 
     void Update()
     {
-        // Auto-calibrate on first frame if enabled
-        if (!_initialized && IsAvailable && autoCalibrateOnStart)
-        {
-            CalibrateNeutral();
-            _initialized = true;
-        }
-
-        // Handle manual calibration input
+        // Manual calibration with K key (optional second-layer adjustment)
         if (Input.GetKeyDown(calibrateKey))
         {
             CalibrateNeutral();
@@ -73,10 +66,10 @@ public class IMUYawInput : MonoBehaviour
 
         if (IsAvailable)
         {
-            // Use direct Euler angles from sensor (not quaternion-derived)
-            Vector3 rawAngles = openZenIMU.SensorEulerAnglesDirect;
-            Vector3 calibratedAngles = rawAngles - _calibrationOffset;
-            YawRotationRate = ConvertYawToRotation(calibratedAngles);
+            // Get sensor angles (already calibrated by OpenZenMoveObject)
+            Vector3 angles = openZenIMU.SensorEulerAnglesDirect;
+            
+            YawRotationRate = ConvertYawToRotation(angles);
         }
         else
         {
@@ -90,11 +83,17 @@ public class IMUYawInput : MonoBehaviour
 
     /// <summary>
     /// Converts IMU yaw angle to normalized rotation rate
+    /// Uses same logic as pitch/roll processing in IMUMovementInputBase
     /// </summary>
     float ConvertYawToRotation(Vector3 eulerAngles)
     {
-        // Extract yaw (Y-axis rotation)
+        // Normalize angle to -180 to +180 range
         float yaw = NormalizeAngle(eulerAngles.y);
+
+        if (showDebugInfo)
+        {
+            Debug.Log($"[IMU Yaw] Raw: {eulerAngles.y:F1}° | Normalized: {yaw:F1}° | Deadzone: {yawDeadzone}° | Passes? {Mathf.Abs(yaw) >= yawDeadzone}");
+        }
 
         // Apply deadzone
         if (Mathf.Abs(yaw) < yawDeadzone)
@@ -102,19 +101,19 @@ public class IMUYawInput : MonoBehaviour
             return 0f;
         }
 
-        // Normalize to 0-1 range based on max angle
+        // Normalize to 0-1 range for mapping curve (same as pitch/roll)
         float yawNormalized = Mathf.Clamp01(Mathf.Abs(yaw) / yawMaxAngle);
 
-        // Apply linear mapping (rate-based)
+        // Apply linear mapping (rate-based, same as IMUMovementRateBased)
         float rotationMapped = yawNormalized * maxRotationSpeed;
 
         // Restore sign and apply inversion
         float rotation = Mathf.Sign(yaw) * rotationMapped;
         if (invertYaw) rotation = -rotation;
 
-        if (showDebugInfo && Mathf.Abs(rotation) > 0.01f)
+        if (showDebugInfo)
         {
-            Debug.Log($"[IMU Yaw] Raw: {eulerAngles.y:F1}° | Calibrated: {yaw:F1}° | Output: {rotation:F2}");
+            Debug.Log($"[IMU Yaw] Abs/Max: {Mathf.Abs(yaw):F1}/{yawMaxAngle:F0} = {yawNormalized:F2} | Output: {rotation:F2}");
         }
 
         return rotation;
@@ -125,20 +124,27 @@ public class IMUYawInput : MonoBehaviour
     /// </summary>
     float NormalizeAngle(float angle)
     {
-        if (angle > 180f)
-            return angle - 360f;
+        // Wrap angle to -180 to +180 range
+        while (angle > 180f)
+            angle -= 360f;
+        while (angle < -180f)
+            angle += 360f;
         return angle;
     }
 
     /// <summary>
     /// Calibrates the current IMU yaw as the neutral position
+    /// Only calibrates yaw (Y), not pitch or roll (optional second-layer calibration)
     /// </summary>
     public void CalibrateNeutral()
     {
         if (IsAvailable)
         {
-            _calibrationOffset = openZenIMU.SensorEulerAnglesDirect;
-            Debug.Log($"IMU Yaw Calibrated. Neutral position offset: {_calibrationOffset}");
+            // Only calibrate yaw (Y component), leave pitch/roll at 0
+            // This is a second-layer calibration on top of OpenZenMoveObject
+            Vector3 currentAngles = openZenIMU.SensorEulerAnglesDirect;
+            _calibrationOffset = new Vector3(0f, currentAngles.y, 0f);
+            Debug.Log($"IMU Yaw Second-Layer Calibrated. Yaw offset: {_calibrationOffset.y:F2}°");
         }
         else
         {
