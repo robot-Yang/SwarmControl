@@ -40,6 +40,16 @@ public class TraditionalInput : MonoBehaviour
     [Tooltip("LR axis for spread control (triggers/bumpers)")]
     public string spreadAxis = "LR";
 
+    [Header("Keyboard Keys")]
+    [Tooltip("Keyboard key for upward height control")]
+    public KeyCode heightUpKey = KeyCode.E;
+    
+    [Tooltip("Keyboard key for downward height control")]
+    public KeyCode heightDownKey = KeyCode.Q;
+    
+    [Tooltip("Height change rate when using keyboard (units per second)")]
+    public float keyboardHeightSpeed = 1.0f;
+
     [Header("Button Numbers (Joystick)")]
     public int selectionNextButton = 5;
     public int selectionPrevButton = 4;
@@ -64,8 +74,17 @@ public class TraditionalInput : MonoBehaviour
         float vertical = Input.GetAxis(verticalAxis);
         MovementInput = new Vector2(horizontal, vertical);
 
-        // Height (right stick vertical)
-        HeightInput = Input.GetAxis(heightAxis);
+        // Height (right stick vertical + keyboard keys)
+        float axisHeight = Input.GetAxis(heightAxis);
+        float keyboardHeight = 0f;
+        
+        if (Input.GetKey(heightUpKey))
+            keyboardHeight += keyboardHeightSpeed;
+        if (Input.GetKey(heightDownKey))
+            keyboardHeight -= keyboardHeightSpeed;
+        
+        // Combine axis and keyboard input (keyboard takes priority if both active)
+        HeightInput = Mathf.Abs(keyboardHeight) > 0.01f ? keyboardHeight : axisHeight;
 
         // Rotation (right stick horizontal)
         RotationInput = Input.GetAxis(rotationAxis);

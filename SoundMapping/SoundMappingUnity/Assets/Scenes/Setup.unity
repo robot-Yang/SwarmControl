@@ -753,7 +753,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 22.25
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -1104,7 +1104,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10
+  m_fontSize: 20
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -2188,7 +2188,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10
+  m_fontSize: 20
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -2453,6 +2453,9 @@ MonoBehaviour:
   rotationAxis: JoystickRightHorizontal
   heightAxis: JoystickRightVertical
   spreadAxis: LR
+  heightUpKey: 101
+  heightDownKey: 113
+  keyboardHeightSpeed: 1
   selectionNextButton: 5
   selectionPrevButton: 4
   embodimentButton: 0
@@ -2558,6 +2561,7 @@ MonoBehaviour:
   invertPitch: 0
   invertRoll: 1
   calibrateKey: 99
+  autoCalibrateOnStart: 1
   maxPitchSpeed: 4
   maxRollSpeed: 4
 --- !u!114 &1134678129
@@ -2594,6 +2598,7 @@ MonoBehaviour:
   maxRotationSpeed: 2
   invertYaw: 0
   calibrateKey: 118
+  autoCalibrateOnStart: 1
   showDebugInfo: 0
 --- !u!1 &1179672691
 GameObject:
@@ -2679,7 +2684,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 22.25
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3038,7 +3043,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 22.25
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3280,7 +3285,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10.25
+  m_fontSize: 20
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3548,7 +3553,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 22.25
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -4069,6 +4074,7 @@ GameObject:
   - component: {fileID: 1573697209}
   - component: {fileID: 1573697210}
   - component: {fileID: 1573697211}
+  - component: {fileID: 1573697212}
   m_Layer: 0
   m_Name: Gamemanager
   m_TagString: GameManager
@@ -4107,7 +4113,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   dronePrefab: {fileID: 2904365767565868958, guid: 8665b86975cd58e49a996d130ca17994, type: 3}
-  maxSpeed: 8
+  maxSpeed: 12
   maxForce: 17
   alpha: 3.5
   beta: 10
@@ -4195,7 +4201,7 @@ MonoBehaviour:
   droneLayer:
     serializedVersion: 2
     m_Bits: 128
-  spawnHeight: 5
+  spawnHeight: 10
   radius: 10
   migrationPoint: {x: 0, y: 0}
   normalMaterial: {fileID: 2100000, guid: 3d0ff9fe2342035478da2ac0c2bafcf1, type: 2}
@@ -4469,6 +4475,42 @@ MonoBehaviour:
   minMainGroupSize: 3
   useXZDistance: 1
   swarmRoot: {fileID: 1547257216}
+--- !u!114 &1573697212
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1573697189}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c93856ab801917479920de7c9361c41, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  swarmRootTag: Swarm
+  swarmRootName: Swarm
+  rescanChildrenEverySec: 1
+  droneComponentTypeName: DroneController
+  sampleHz: 30
+  waitForDronesToStart: 1
+  recordHz: 0
+  recordEveryNthSample: 1
+  dontDestroyOnLoad: 1
+  lazyDiscover: 1
+  outSubfolder: Trajectories
+  pidOverride: 
+  sceneLabelOverride: 
+  setupSceneName: Scene Selector
+  autosaveEverySec: 0
+  enableHotkeySave: 1
+  useNetworkForMainGroup: 1
+  includeAllUntilNetworkReady: 1
+  linkDistance: 3
+  minMainGroupSize: 3
+  useXZDistance: 1
+  runLabelName: Run
+  singleRunMode: 1
+  swarmRoot: {fileID: 0}
 --- !u!1 &1645719226
 GameObject:
   m_ObjectHideFlags: 0
@@ -4703,7 +4745,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 15.2
+  m_fontSize: 20
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -6154,7 +6196,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 22.25
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
