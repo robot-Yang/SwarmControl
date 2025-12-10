@@ -1,5 +1,10 @@
 fileFormatVersion: 2
+<<<<<<<< HEAD:SoundMapping/SoundMappingUnity/Assets/Scenes/SceneStudy/FPVObs_2_OLD.unity.meta
 guid: e477ff6498d364fb390b776b39a9401f
+========
+guid: 66684a66e4ec73945b051ec7b38e895f
+folderAsset: yes
+>>>>>>>> a7d345522935424ef4122f6c7068146b04992d68:SoundMapping/SoundMappingUnity/Assets/_Scripts/_Controls/InputSources/SwarmHeight.meta
 DefaultImporter:
   externalObjects: {}
   userData: 
