@@ -26,7 +26,7 @@ public class OpenZenMoveObject : MonoBehaviour
     public Vector3 SensorEulerAnglesDirect { get; private set; } // Direct from sensor (not from quaternion)
 
     [Header("Calibration")]
-    [Tooltip("Press this key to calibrate neutral position for pitch and roll")]
+    [Tooltip("Press this key to calibrate neutral position for pitch, yaw, and roll")]
     public KeyCode calibrateKey = KeyCode.C;
     [Tooltip("Automatically calibrate on start")]
     public bool autoCalibrateOnStart = true;
@@ -149,11 +149,11 @@ public class OpenZenMoveObject : MonoBehaviour
                     float pitch = fr.getitem(1);
                     float yaw = fr.getitem(2);
                     
-                    // Apply calibration offset to pitch and roll only (not yaw)
+                    // Apply calibration offset to all axes (pitch, yaw, roll)
                     Vector3 rawAngles = new Vector3(pitch, yaw, roll); // Unity format: (X=pitch, Y=yaw, Z=roll)
                     SensorEulerAnglesDirect = new Vector3(
                         rawAngles.x - _calibrationOffset.x,  // Pitch (calibrated)
-                        rawAngles.y,                          // Yaw (not calibrated)
+                        rawAngles.y - _calibrationOffset.y,  // Yaw (calibrated)
                         rawAngles.z - _calibrationOffset.z   // Roll (calibrated)
                     );
                 }
@@ -174,16 +174,15 @@ public class OpenZenMoveObject : MonoBehaviour
     }
 
     /// <summary>
-    /// Calibrates the current pitch and roll as the neutral (zero) position.
-    /// Yaw is not calibrated.
+    /// Calibrates the current pitch, yaw, and roll as the neutral (zero) position.
     /// </summary>
     public void CalibrateNeutral()
     {
         // Store the current raw sensor values as the offset
-        // We only calibrate pitch (X) and roll (Z), not yaw (Y)
+        // Calibrate all three axes: pitch (X), yaw (Y), and roll (Z)
         Vector3 currentRaw = SensorEulerAnglesDirect + _calibrationOffset; // Get back to raw values
-        _calibrationOffset = new Vector3(currentRaw.x, 0f, currentRaw.z);
+        _calibrationOffset = currentRaw;
         
-        Debug.Log($"OpenZen Calibrated. Pitch offset: {_calibrationOffset.x:F2}°, Roll offset: {_calibrationOffset.z:F2}°");
+        Debug.Log($"OpenZen Calibrated. Pitch: {_calibrationOffset.x:F2}°, Yaw: {_calibrationOffset.y:F2}°, Roll: {_calibrationOffset.z:F2}°");
     }
 }
