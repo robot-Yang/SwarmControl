@@ -753,7 +753,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10.25
+  m_fontSize: 10.45
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -1104,7 +1104,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 12.7
+  m_fontSize: 12.95
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -2188,7 +2188,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 13.85
+  m_fontSize: 14.05
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -2417,7 +2417,7 @@ MonoBehaviour:
   mediaPipeSpreadInput: {fileID: 1134678124}
   mediaPipeHeightInput: {fileID: 1134678125}
   useIMUForMovement: 0
-  useMetaQuestForRotation: 0
+  useMetaQuestForRotation: 1
   useIMUForRotation: 0
   useMediaPipeForSpread: 0
   useMediaPipeForHeight: 0
@@ -2491,14 +2491,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cameraRig: {fileID: 1940585593}
-  rotationMode: 1
+  rotationMode: 0
   rotationSensitivity: 1
-  yawDeadzone: 2
-  maxRotationRate: 90
+  yawDeadzone: 9
+  yawMaxAngle: 30
   maxYawLeft: -90
   maxYawRight: 90
   neutralDeadzone: 5
   holdDuration: 0.5
+  calibrateKey: 99
   showDebugInfo: 0
 --- !u!114 &1134678124
 MonoBehaviour:
@@ -2686,7 +2687,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10.25
+  m_fontSize: 10.5
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3045,7 +3046,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10.25
+  m_fontSize: 10.45
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3287,7 +3288,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 15.1
+  m_fontSize: 15.35
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3555,7 +3556,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10.3
+  m_fontSize: 10.55
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -6203,7 +6204,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10.3
+  m_fontSize: 10.5
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
