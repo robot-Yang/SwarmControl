@@ -401,7 +401,7 @@ public class HapticsTest : MonoBehaviour
     private List<int[]> logSizeDuties = new();
     private float logStartTime;
     private string logFilePath;
-    private bool enableLogging = true;  // can toggle if needed
+    private bool enableLogging = false;  // can toggle if needed
 
     private static void GetDynamicExtents(IReadOnlyList<Transform> drones,
                                     Transform swarmFrame,
