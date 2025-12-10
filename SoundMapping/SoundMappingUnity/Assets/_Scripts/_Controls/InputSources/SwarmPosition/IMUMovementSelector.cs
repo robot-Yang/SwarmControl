@@ -137,22 +137,32 @@ public class IMUMovementSelector : MonoBehaviour
     {
         if (ActiveMode == null || !ActiveMode.IsAvailable) return;
 
-        // Get raw OpenZen Euler angles (direct from sensor)
-        Vector3 rawEuler = ActiveMode.openZenIMU.SensorEulerAnglesDirect;
+        // Get raw (uncalibrated) and calibrated angles
+        Vector3 rawAngles = ActiveMode.openZenIMU.SensorEulerAnglesRaw;
+        Vector3 calibratedAngles = ActiveMode.openZenIMU.SensorEulerAnglesDirect;
 
-        // Display raw IMU angles in top-right corner
+        // Display IMU angles in top-right corner
         GUIStyle style = new GUIStyle();
-        style.fontSize = 16;
+        style.fontSize = 14;
         style.normal.textColor = Color.yellow;
         style.alignment = TextAnchor.UpperRight;
 
-        float x = Screen.width - 250;
+        float x = Screen.width - 280;
         float y = 10;
-        float lineHeight = 22;
+        float lineHeight = 20;
 
-        GUI.Label(new Rect(x, y, 240, 22), "=== RAW OPENZEN VALUES ===", style);
-        GUI.Label(new Rect(x, y + lineHeight, 240, 22), $"Pitch: {rawEuler.x:F2}°", style);
-        GUI.Label(new Rect(x, y + lineHeight * 2, 240, 22), $"Yaw: {rawEuler.y:F2}°", style);
-        GUI.Label(new Rect(x, y + lineHeight * 3, 240, 22), $"Roll: {rawEuler.z:F2}°", style);
+        // Raw values (uncalibrated)
+        GUI.Label(new Rect(x, y, 270, 20), "=== RAW (UNCALIBRATED) ===", style);
+        GUI.Label(new Rect(x, y + lineHeight, 270, 20), $"Pitch: {rawAngles.x:F2}°", style);
+        GUI.Label(new Rect(x, y + lineHeight * 2, 270, 20), $"Yaw: {rawAngles.y:F2}°", style);
+        GUI.Label(new Rect(x, y + lineHeight * 3, 270, 20), $"Roll: {rawAngles.z:F2}°", style);
+
+        // Calibrated values
+        style.normal.textColor = Color.cyan;
+        float y2 = y + lineHeight * 5;
+        GUI.Label(new Rect(x, y2, 270, 20), "=== CALIBRATED ===", style);
+        GUI.Label(new Rect(x, y2 + lineHeight, 270, 20), $"Pitch: {calibratedAngles.x:F2}°", style);
+        GUI.Label(new Rect(x, y2 + lineHeight * 2, 270, 20), $"Yaw: {calibratedAngles.y:F2}°", style);
+        GUI.Label(new Rect(x, y2 + lineHeight * 3, 270, 20), $"Roll: {calibratedAngles.z:F2}°", style);
     }
 }

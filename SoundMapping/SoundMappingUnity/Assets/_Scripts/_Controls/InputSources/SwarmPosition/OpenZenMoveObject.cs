@@ -23,7 +23,8 @@ public class OpenZenMoveObject : MonoBehaviour
     public Quaternion SensorOrientation { get; private set; }
     public Vector3 SensorAcceleration { get; private set; }
     public Vector3 SensorEulerAngles { get; private set; }
-    public Vector3 SensorEulerAnglesDirect { get; private set; } // Direct from sensor (not from quaternion)
+    public Vector3 SensorEulerAnglesDirect { get; private set; } // Calibrated angles (after offset subtraction)
+    public Vector3 SensorEulerAnglesRaw { get; private set; } // Raw uncalibrated angles from sensor
 
     [Header("Calibration")]
     [Tooltip("Press this key to calibrate neutral position for pitch, yaw, and roll")]
@@ -149,8 +150,11 @@ public class OpenZenMoveObject : MonoBehaviour
                     float pitch = fr.getitem(1);
                     float yaw = fr.getitem(2);
                     
-                    // Apply calibration offset to all axes (pitch, yaw, roll)
+                    // Store raw uncalibrated angles
                     Vector3 rawAngles = new Vector3(pitch, yaw, roll); // Unity format: (X=pitch, Y=yaw, Z=roll)
+                    SensorEulerAnglesRaw = rawAngles;
+                    
+                    // Apply calibration offset to all axes (pitch, yaw, roll)
                     SensorEulerAnglesDirect = new Vector3(
                         rawAngles.x - _calibrationOffset.x,  // Pitch (calibrated)
                         rawAngles.y - _calibrationOffset.y,  // Yaw (calibrated)

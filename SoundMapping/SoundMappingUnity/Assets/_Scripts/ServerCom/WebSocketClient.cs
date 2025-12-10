@@ -13,7 +13,8 @@ public class WebSocketClient : MonoBehaviour
 
     void Start()
     {
-        ws = new WebSocket("ws://localhost:9052");
+        // Use 127.0.0.1 instead of localhost for better Windows compatibility
+        ws = new WebSocket("ws://127.0.0.1:9052");
 
         ws.OnOpen += (sender, e) =>
         {
@@ -36,7 +37,8 @@ public class WebSocketClient : MonoBehaviour
             UpdateStatus("Connection closed oh noooo.");
         };
 
-        ws.Connect();
+        // Connect asynchronously to avoid blocking Unity
+        ws.ConnectAsync();
     }
 
     void ParseHandData(string jsonData)
@@ -48,7 +50,7 @@ public class WebSocketClient : MonoBehaviour
             HandHeight = data.height;
             
             // Debug logging enabled
-            Debug.Log($"Received - Distance: {HandDistance:F2}, Height: {HandHeight:F2}");
+            // Debug.Log($"Received - Distance: {HandDistance:F2}, Height: {HandHeight:F2}");
         }
         catch (System.Exception ex)
         {

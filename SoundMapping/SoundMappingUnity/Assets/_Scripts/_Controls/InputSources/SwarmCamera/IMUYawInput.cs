@@ -21,7 +21,7 @@ public class IMUYawInput : MonoBehaviour
     public float maxRotationSpeed = 2.0f;
 
     [Tooltip("Invert yaw direction (left becomes right)")]
-    public bool invertYaw = true;
+    public bool invertYaw = false;
 
     [Header("Calibration")]
     [Tooltip("Press this key to calibrate neutral yaw position")]
@@ -32,7 +32,7 @@ public class IMUYawInput : MonoBehaviour
     public bool autoCalibrateOnStart = false;
 
     [Header("Debug")]
-    public bool showDebugInfo = true;
+    public bool showDebugInfo = false;
 
     private Vector3 _calibrationOffset = Vector3.zero;
     private bool _initialized = false;
