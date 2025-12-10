@@ -753,7 +753,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 10.25
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -1104,7 +1104,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10
+  m_fontSize: 12.7
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -1548,17 +1548,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4453513310108136, guid: 835e735ca71bf78459fb2cababd74112, type: 3}
   m_PrefabInstance: {fileID: 710912637}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &710912639 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 114428879332287356, guid: 835e735ca71bf78459fb2cababd74112, type: 3}
-  m_PrefabInstance: {fileID: 710912637}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cb7623a8f0b49cf4dbaa40aea4d4be64, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &747745158
 GameObject:
   m_ObjectHideFlags: 0
@@ -2199,7 +2188,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10
+  m_fontSize: 13.85
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -2392,11 +2381,16 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1134678110}
+  - component: {fileID: 1134678107}
   - component: {fileID: 1134678109}
   - component: {fileID: 1134678108}
-  - component: {fileID: 1134678107}
   - component: {fileID: 1134678111}
-  - component: {fileID: 1134678112}
+  - component: {fileID: 1134678126}
+  - component: {fileID: 1134678125}
+  - component: {fileID: 1134678124}
+  - component: {fileID: 1134678129}
+  - component: {fileID: 1134678127}
+  - component: {fileID: 1134678130}
   m_Layer: 0
   m_Name: InputManager
   m_TagString: Untagged
@@ -2417,19 +2411,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   traditionalInput: {fileID: 1134678109}
-  openZenIMU: {fileID: 1134678108}
+  imuMovementSelector: {fileID: 1134678129}
   metaQuestInput: {fileID: 1134678111}
-  handTrackingInput: {fileID: 1134678112}
-  useOpenZenForMovement: 1
+  imuYawInput: {fileID: 1134678130}
+  mediaPipeSpreadInput: {fileID: 1134678124}
+  mediaPipeHeightInput: {fileID: 1134678125}
+  useIMUForMovement: 0
   useMetaQuestForRotation: 0
-  useFusedHandsForSpread: 0
+  useIMUForRotation: 0
+  useMediaPipeForSpread: 0
+  useMediaPipeForHeight: 0
   enableTraditionalFallback: 1
-  pitchDeadzone: 5
-  pitchMaxAngle: 30
-  rollDeadzone: 5
-  rollMaxAngle: 30
-  invertPitch: 0
-  invertRoll: 0
 --- !u!114 &1134678108
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2444,6 +2436,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   OpenZenIoType: 1
   OpenZenIdentifier: 00:04:3E:6C:52:90
+  calibrateKey: 99
+  autoCalibrateOnStart: 1
 --- !u!114 &1134678109
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2461,6 +2455,9 @@ MonoBehaviour:
   rotationAxis: JoystickRightHorizontal
   heightAxis: JoystickRightVertical
   spreadAxis: LR
+  heightUpKey: 101
+  heightDownKey: 113
+  keyboardHeightSpeed: 1
   selectionNextButton: 5
   selectionPrevButton: 4
   embodimentButton: 0
@@ -2494,11 +2491,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cameraRig: {fileID: 1940585593}
+  rotationMode: 1
   rotationSensitivity: 1
   yawDeadzone: 2
   maxRotationRate: 90
+  maxYawLeft: -90
+  maxYawRight: 90
+  neutralDeadzone: 5
+  holdDuration: 0.5
   showDebugInfo: 0
---- !u!114 &1134678112
+--- !u!114 &1134678124
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -2507,17 +2509,98 @@ MonoBehaviour:
   m_GameObject: {fileID: 1134678106}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b1d16a0599878f74da92f62a1f7e3287, type: 3}
+  m_Script: {fileID: 11500000, guid: c6240f4fa05cef7499253243aee2afa1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  leftHand: {fileID: 710912639}
-  rightHand: {fileID: 1555848675}
-  neutralDistance: 0.35
-  deadzone: 0.1
-  minDistance: 0.1
-  maxDistance: 0.8
-  requireHighConfidence: 1
-  smoothingSpeed: 6
+  webSocketClient: {fileID: 1134678126}
+  minSwarmSeparation: 1
+  maxSwarmSeparation: 5
+  smoothing: 0.3
+--- !u!114 &1134678125
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 245bcda52c47d224090a627a065984f0, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  webSocketClient: {fileID: 1134678126}
+  maxVerticalSpeed: 2
+  smoothing: 0.3
+--- !u!114 &1134678126
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4260e57a32eabf24fbbbdbfd7ed30a62, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!114 &1134678127
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0e953db5e3bc164ea2ed77d20b98cef, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  openZenIMU: {fileID: 1134678108}
+  pitchMaxAngle: 30
+  rollMaxAngle: 30
+  pitchDeadzone: 5
+  rollDeadzone: 5
+  invertPitch: 0
+  invertRoll: 1
+  calibrateKey: 99
+  autoCalibrateOnStart: 1
+  maxPitchSpeed: 4
+  maxRollSpeed: 4
+--- !u!114 &1134678129
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c0816e79338e33b4095131c019ca7ec5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  selectedMode: 2
+  linearMode: {fileID: 0}
+  exponentialMode: {fileID: 0}
+  rateBasedMode: {fileID: 1134678127}
+--- !u!114 &1134678130
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 85706a0a4d656c14390cc9fd6af55003, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  openZenIMU: {fileID: 1134678108}
+  yawMaxAngle: 45
+  yawDeadzone: 5
+  maxRotationSpeed: 2
+  invertYaw: 0
+  calibrateKey: 118
+  autoCalibrateOnStart: 1
   showDebugInfo: 0
 --- !u!1 &1179672691
 GameObject:
@@ -2603,7 +2686,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 10.25
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -2962,7 +3045,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 10.25
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3204,7 +3287,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10
+  m_fontSize: 15.1
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3472,7 +3555,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 10.3
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3970,17 +4053,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 4453513310108136, guid: 835e735ca71bf78459fb2cababd74112, type: 3}
   m_PrefabInstance: {fileID: 1555848673}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1555848675 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 114428879332287356, guid: 835e735ca71bf78459fb2cababd74112, type: 3}
-  m_PrefabInstance: {fileID: 1555848673}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cb7623a8f0b49cf4dbaa40aea4d4be64, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1 &1573697189
 GameObject:
   m_ObjectHideFlags: 0
@@ -4004,6 +4076,7 @@ GameObject:
   - component: {fileID: 1573697209}
   - component: {fileID: 1573697210}
   - component: {fileID: 1573697211}
+  - component: {fileID: 1573697212}
   m_Layer: 0
   m_Name: Gamemanager
   m_TagString: GameManager
@@ -4042,7 +4115,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   dronePrefab: {fileID: 2904365767565868958, guid: 8665b86975cd58e49a996d130ca17994, type: 3}
-  maxSpeed: 8
+  maxSpeed: 12
   maxForce: 17
   alpha: 3.5
   beta: 10
@@ -4106,7 +4179,7 @@ MonoBehaviour:
   camMinimap: {fileID: 1892515272}
   minimap: {fileID: 1840378215}
   swarmHolder: {fileID: 1547257216}
-  heightCamera: 15
+  heightCamera: 30
   rotationSpeed: 80
   lastEmbodiedDrone: {fileID: 0}
   initialCamRotation: {x: 0, y: 0, z: 0, w: 0}
@@ -4130,7 +4203,7 @@ MonoBehaviour:
   droneLayer:
     serializedVersion: 2
     m_Bits: 128
-  spawnHeight: 5
+  spawnHeight: 10
   radius: 10
   migrationPoint: {x: 0, y: 0}
   normalMaterial: {fileID: 2100000, guid: 3d0ff9fe2342035478da2ac0c2bafcf1, type: 2}
@@ -4404,6 +4477,47 @@ MonoBehaviour:
   minMainGroupSize: 3
   useXZDistance: 1
   swarmRoot: {fileID: 1547257216}
+--- !u!114 &1573697212
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1573697189}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4c93856ab801917479920de7c9361c41, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  swarmRootTag: Swarm
+  swarmRootName: Swarm
+  rescanChildrenEverySec: 1
+  droneComponentTypeName: DroneController
+  sampleHz: 30
+  waitForDronesToStart: 1
+  recordHz: 0
+  recordEveryNthSample: 1
+  dontDestroyOnLoad: 1
+  lazyDiscover: 1
+  outSubfolder: Trajectories
+  pidOverride: 
+  sceneLabelOverride: 
+  setupSceneName: Scene Selector
+  autosaveEverySec: 0
+  enableHotkeySave: 1
+  useNetworkForMainGroup: 1
+  includeAllUntilNetworkReady: 1
+  linkDistance: 3
+  minMainGroupSize: 3
+  useXZDistance: 1
+  runLabelName: Run
+  singleRunMode: 1
+  embodiedDroneOverride: {fileID: 0}
+  embodiedTag: Embodied
+  embodiedName: EmbodiedDrone
+  embodiedFlagFieldOrProperty: isEmbodied
+  embodiedFlagAltProperty: IsEmbodied
+  swarmRoot: {fileID: 0}
 --- !u!1 &1645719226
 GameObject:
   m_ObjectHideFlags: 0
@@ -4638,7 +4752,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10.15
+  m_fontSize: 15.2
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -6089,7 +6203,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 10.3
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
