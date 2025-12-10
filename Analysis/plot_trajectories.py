@@ -178,6 +178,16 @@ def plot_3d_trajectories(data, height_deadzone=0.2):
     ax.set_ylabel('Z Position (m) - Forward/Back', fontsize=12)
     ax.set_zlabel('Y Position (m) - Height', fontsize=12)
     ax.set_title(f"Swarm Centroid Trajectory (3D)\n{data['scene']} - {data['pid']}", fontsize=14)
+    
+    # Set equal aspect ratio for all axes
+    max_range = np.array([cx.max()-cx.min(), cz.max()-cz.min(), cy.max()-cy.min()]).max() / 2.0
+    mid_x = (cx.max()+cx.min()) * 0.5
+    mid_z = (cz.max()+cz.min()) * 0.5
+    mid_y = (cy.max()+cy.min()) * 0.5
+    ax.set_xlim(mid_x - max_range, mid_x + max_range)
+    ax.set_ylim(mid_z - max_range, mid_z + max_range)
+    ax.set_zlim(mid_y - max_range, mid_y + max_range)
+    
     ax.legend()
    
     plt.tight_layout()
