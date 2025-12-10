@@ -147,8 +147,8 @@ public class IMUMovementSelector : MonoBehaviour
         float y = 10;
         float lineHeight = 20;
 
-        GUI.Label(new Rect(x, y, 190, 20), $"Pitch: {ActiveMode.GetPitchAngle():F1}°", style);
-        GUI.Label(new Rect(x, y + lineHeight, 190, 20), $"Roll: {ActiveMode.GetRollAngle():F1}°", style);
-        GUI.Label(new Rect(x, y + lineHeight * 2, 190, 20), $"Yaw: {ActiveMode.GetYawAngle():F1}° (display only)", style);
+        //GUI.Label(new Rect(x, y, 190, 20), $"Pitch: {ActiveMode.GetPitchAngle():F1}°", style);
+        //GUI.Label(new Rect(x, y + lineHeight, 190, 20), $"Roll: {ActiveMode.GetRollAngle():F1}°", style);
+        //GUI.Label(new Rect(x, y + lineHeight * 2, 190, 20), $"Yaw: {ActiveMode.GetYawAngle():F1}° (display only)", style);
     }
 }

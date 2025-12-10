@@ -4510,6 +4510,11 @@ MonoBehaviour:
   useXZDistance: 1
   runLabelName: Run
   singleRunMode: 1
+  embodiedDroneOverride: {fileID: 0}
+  embodiedTag: Embodied
+  embodiedName: EmbodiedDrone
+  embodiedFlagFieldOrProperty: isEmbodied
+  embodiedFlagAltProperty: IsEmbodied
   swarmRoot: {fileID: 0}
 --- !u!1 &1645719226
 GameObject:

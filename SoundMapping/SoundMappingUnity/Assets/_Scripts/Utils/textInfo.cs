@@ -53,6 +53,14 @@ public class textInfo : MonoBehaviour
     }
     void Update()
     {
+        // Hide all UI text
+        connexionText.text = "";
+        SpreadnessText.text = "";
+        IsolationText.text = "";
+        DroneCrashText.text = "";
+        SpreadnessSwarmScore.text = "";
+        
+        /* Original code - uncomment to re-enable
         if(LevelConfiguration._ShowText)
         {
             connexionText.text = showConnexion ? "Connection: " + getOneDecimal(swarmModel.swarmConnectionScore) : "";
@@ -69,6 +77,7 @@ public class textInfo : MonoBehaviour
             DroneCrashText.text = "";
             SpreadnessSwarmScore.text = "";
         }
+        */
         
         if(LevelConfiguration._CollectibleNumber > 0)
         {

@@ -55,6 +55,32 @@ public class Timer : MonoBehaviour
         UpdateTimerDisplay();
         UpdateTimerDisplayNetwork();
 
+        // Hide status indicators and their parent objects
+        if (TCPserver != null)
+        {
+            TCPserver.enabled = false;
+            if (TCPserver.transform.parent != null)
+                TCPserver.transform.parent.gameObject.SetActive(false);
+            else
+                TCPserver.gameObject.SetActive(false);
+        }
+        if (Bluetooth != null)
+        {
+            Bluetooth.enabled = false;
+            if (Bluetooth.transform.parent != null)
+                Bluetooth.transform.parent.gameObject.SetActive(false);
+            else
+                Bluetooth.gameObject.SetActive(false);
+        }
+        if (Controller != null)
+        {
+            Controller.enabled = false;
+            if (Controller.transform.parent != null)
+                Controller.transform.parent.gameObject.SetActive(false);
+            else
+                Controller.gameObject.SetActive(false);
+        }
+
         StartCoroutine(updateStatus());
     }
 
@@ -97,11 +123,12 @@ public class Timer : MonoBehaviour
 
     IEnumerator updateStatus()
     {
+        // Hidden - TCP, Bluetooth, Controller status indicators disabled
         while (true)
         {
-            TCPserver.color = TcpSender.tcpserveron ? Color.green : Color.red;
-            Bluetooth.color = TcpSender.bluetoothon ? Color.green : Color.red;
-            Controller.color = HapticsTest.gamePadConnected ? Color.green : Color.red;
+            // TCPserver.color = TcpSender.tcpserveron ? Color.green : Color.red;
+            // Bluetooth.color = TcpSender.bluetoothon ? Color.green : Color.red;
+            // Controller.color = HapticsTest.gamePadConnected ? Color.green : Color.red;
             yield return new WaitForSeconds(0.5f);
         }
     }

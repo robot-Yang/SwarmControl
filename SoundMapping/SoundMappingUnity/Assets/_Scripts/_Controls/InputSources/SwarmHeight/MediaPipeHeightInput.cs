@@ -72,9 +72,8 @@ public class MediaPipeHeightInput : MonoBehaviour
     {
         if (!Application.isPlaying) return;
 
-        GUILayout.BeginArea(new Rect(320, 120, 300, 100));
-        GUILayout.Label("<b>MediaPipe Height Input</b>");
-        GUILayout.Label($"Connected: {IsAvailable}");
+        GUILayout.BeginArea(new Rect(900, 30, 300, 100));
+        GUILayout.Label($"<b>MediaPipe Height Input</b> Connected: {IsAvailable}");
         if (IsAvailable)
         {
             GUILayout.Label($"Raw Height: {webSocketClient.HandHeight:F2}");

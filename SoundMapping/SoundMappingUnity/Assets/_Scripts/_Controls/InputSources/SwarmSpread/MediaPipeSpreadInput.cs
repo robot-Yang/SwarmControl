@@ -74,9 +74,8 @@ public class MediaPipeSpreadInput : MonoBehaviour
     {
         if (!Application.isPlaying) return;
 
-        GUILayout.BeginArea(new Rect(320, 10, 300, 100));
-        GUILayout.Label("<b>MediaPipe Spread Input</b>");
-        GUILayout.Label($"Connected: {IsAvailable}");
+        GUILayout.BeginArea(new Rect(900, 10, 300, 100));
+        GUILayout.Label($"<b>MediaPipe Spread Input</b> Connected: {IsAvailable}");
         if (IsAvailable)
         {
             GUILayout.Label($"Raw Distance: {webSocketClient.HandDistance:F2}");
