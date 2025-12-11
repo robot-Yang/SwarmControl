@@ -38,7 +38,7 @@ public class TraditionalInput : MonoBehaviour
     public string heightAxis = "JoystickRightVertical";
     
     [Tooltip("LR axis for spread control (triggers/bumpers)")]
-    public string spreadAxis = "LR";
+    public string spreadAxis = "";
 
     [Header("Keyboard Keys")]
     [Tooltip("Keyboard key for upward height control")]

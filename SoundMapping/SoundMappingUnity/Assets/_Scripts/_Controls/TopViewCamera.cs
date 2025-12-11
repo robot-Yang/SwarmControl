@@ -38,7 +38,7 @@ public class TopViewCamera : MonoBehaviour
         }
 
         // Set camera to orthographic for true top-down view
-        topCamera.orthographic = true;
+        topCamera.orthographic = false;
         topCamera.orthographicSize = orthographicSize;
 
         // Position camera to look straight down

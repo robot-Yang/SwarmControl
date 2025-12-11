@@ -152,17 +152,17 @@ public class IMUMovementSelector : MonoBehaviour
         float lineHeight = 20;
 
         // Raw values (uncalibrated)
-        GUI.Label(new Rect(x, y, 270, 20), "=== RAW (UNCALIBRATED) ===", style);
-        GUI.Label(new Rect(x, y + lineHeight, 270, 20), $"Pitch: {rawAngles.x:F2}°", style);
-        GUI.Label(new Rect(x, y + lineHeight * 2, 270, 20), $"Yaw: {rawAngles.y:F2}°", style);
-        GUI.Label(new Rect(x, y + lineHeight * 3, 270, 20), $"Roll: {rawAngles.z:F2}°", style);
+        //GUI.Label(new Rect(x, y, 270, 20), "=== RAW (UNCALIBRATED) ===", style);
+        //GUI.Label(new Rect(x, y + lineHeight, 270, 20), $"Pitch: {rawAngles.x:F2}°", style);
+        //GUI.Label(new Rect(x, y + lineHeight * 2, 270, 20), $"Yaw: {rawAngles.y:F2}°", style);
+        //GUI.Label(new Rect(x, y + lineHeight * 3, 270, 20), $"Roll: {rawAngles.z:F2}°", style);
 
         // Calibrated values
         style.normal.textColor = Color.cyan;
         float y2 = y + lineHeight * 5;
-        GUI.Label(new Rect(x, y2, 270, 20), "=== CALIBRATED ===", style);
-        GUI.Label(new Rect(x, y2 + lineHeight, 270, 20), $"Pitch: {calibratedAngles.x:F2}°", style);
-        GUI.Label(new Rect(x, y2 + lineHeight * 2, 270, 20), $"Yaw: {calibratedAngles.y:F2}°", style);
-        GUI.Label(new Rect(x, y2 + lineHeight * 3, 270, 20), $"Roll: {calibratedAngles.z:F2}°", style);
+        //GUI.Label(new Rect(x, y2, 270, 20), "=== CALIBRATED ===", style);
+        //GUI.Label(new Rect(x, y2 + lineHeight, 270, 20), $"Pitch: {calibratedAngles.x:F2}°", style);
+        //GUI.Label(new Rect(x, y2 + lineHeight * 2, 270, 20), $"Yaw: {calibratedAngles.y:F2}°", style);
+        //GUI.Label(new Rect(x, y2 + lineHeight * 3, 270, 20), $"Roll: {calibratedAngles.z:F2}°", style);
     }
 }

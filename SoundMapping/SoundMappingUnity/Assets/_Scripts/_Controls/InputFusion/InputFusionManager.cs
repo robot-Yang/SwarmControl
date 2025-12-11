@@ -302,26 +302,26 @@ public class InputFusionManager : MonoBehaviour
         GUILayout.BeginArea(new Rect(10, 10, 400, 300));
         GUILayout.Label($"<b>=== INPUT FUSION STATUS ===</b>");
         GUILayout.Label($"Movement: {SwarmMovement}");
-        GUILayout.Label($"Spread: {SwarmSpread:F2} (Absolute: {IsSpreadAbsolute})");
-        GUILayout.Label($"<color=yellow>Camera Rotation OUTPUT: {CameraRotation:F2}</color>");
-        GUILayout.Label($"---");
-        GUILayout.Label($"IMU Movement Active: {useIMUForMovement}");
-        GUILayout.Label($"<color=cyan>MetaQuest Rotation Active: {useMetaQuestForRotation}</color>");
-        GUILayout.Label($"IMU Rotation Active: {useIMUForRotation}");
-        GUILayout.Label($"MediaPipe Spread Active: {useMediaPipeForSpread}");
-        GUILayout.Label($"MediaPipe Height Active: {useMediaPipeForHeight}");
-        GUILayout.Label($"Traditional Fallback: {enableTraditionalFallback}");
+        GUILayout.Label($"Spread: {SwarmSpread:F2}");
+        GUILayout.Label($"Camera Rotation OUTPUT: {CameraRotation:F2}");
+       // GUILayout.Label($"---");
+       // GUILayout.Label($"IMU Movement Active: {useIMUForMovement}");
+       // GUILayout.Label($"<color=cyan>MetaQuest Rotation Active: {useMetaQuestForRotation}</color>");
+        //GUILayout.Label($"IMU Rotation Active: {useIMUForRotation}");
+       // GUILayout.Label($"MediaPipe Spread Active: {useMediaPipeForSpread}");
+        //GUILayout.Label($"MediaPipe Height Active: {useMediaPipeForHeight}");
+        //GUILayout.Label($"Traditional Fallback: {enableTraditionalFallback}");
         
         // Show pitch active status (left/right movement)
         bool pitchActive = useIMUForMovement && 
                          imuMovementSelector != null && 
                          imuMovementSelector.ActiveMode != null && 
                          imuMovementSelector.ActiveMode.IsPitchActive;
-        GUILayout.Label($"<color=orange>Pitch Active (Yaw Locked): {pitchActive}</color>");
+        //GUILayout.Label($"<color=orange>Pitch Active (Yaw Locked): {pitchActive}</color>");
         
         if (useMetaQuestForRotation && metaQuestInput != null)
         {
-            GUILayout.Label($"<color=lime>MetaQuest Yaw Rate: {metaQuestInput.HeadsetYawRate:F2}</color>");
+            //GUILayout.Label($"<color=lime>MetaQuest Yaw Rate: {metaQuestInput.HeadsetYawRate:F2}</color>");
         }
         GUILayout.EndArea();
     }
