@@ -72,6 +72,8 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     public string sceneLabelOverride = "";
     [Tooltip("Name of the setup scene (only used to disambiguate labels).")]
     public string setupSceneName = "Scene Selector";
+    [Tooltip("Custom prefix for the output filename. If empty, uses default naming.")]
+    public string customFilePrefix = "";
 
 
     [Header("Quality of life")]
@@ -156,6 +158,9 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     // --- Embodied detection cache ---
     private Transform _embodiedTransform;
     private int _embodiedStableId = int.MinValue;
+    
+    // --- Collectibles tracking ---
+    private static int _collectiblesCounter = 0;
 
 
     // -------------------- Data types --------------------
@@ -204,6 +209,10 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         // --- NEW: embodied metadata written once per file ---
         public int embodiedId;        // -2147483648 (int.MinValue) if unknown
         public string embodiedName;   // empty if unknown
+        
+        // --- Collectibles and elapsed time ---
+        public int collectiblesPickedUp;  // total collectibles collected during run
+        public float elapsedTime;         // time between start and end collider (seconds)
     }
 
 
@@ -378,6 +387,14 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     {
         if (_instance != null) _instance.MarkTrialStopInternal(label);
     }
+    
+    public static void RecordCollectible()
+    {
+        _collectiblesCounter++;
+#if UNITY_EDITOR
+        Debug.Log($"[SwarmTrajectoryRecorder] Collectible recorded. Total: {_collectiblesCounter}");
+#endif
+    }
 
 
     // STRICT single-run policy: ignore duplicate starts, ignore stop when no run is open.
@@ -410,6 +427,10 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
             endGameTime = 0f,
             endRealtime = 0f
         };
+        
+        // Reset collectibles counter for new run
+        _collectiblesCounter = 0;
+        
 #if UNITY_EDITOR
         Debug.Log($"[SwarmTrajectoryRecorder] Trial START '{_openTrial.label}' at t={_openTrial.startGameTime:F2}s");
 #endif
@@ -997,6 +1018,14 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 
         // Make sure embodied flags are up-to-date right before write
         RefreshEmbodiedLabeling();
+        
+        // Calculate elapsed time from the Run trial if it exists
+        float elapsedTime = 0f;
+        var runTrial = _trialsBuffer.Find(t => t.label == runLabelName);
+        if (runTrial != null && runTrial.endGameTime > 0f)
+        {
+            elapsedTime = runTrial.endGameTime - runTrial.startGameTime;
+        }
 
 
         var log = new TrajectoryLog
@@ -1012,7 +1041,11 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 
             // NEW: embodied metadata
             embodiedId = _embodiedStableId,
-            embodiedName = _embodiedTransform ? _embodiedTransform.name : string.Empty
+            embodiedName = _embodiedTransform ? _embodiedTransform.name : string.Empty,
+            
+            // Collectibles and elapsed time
+            collectiblesPickedUp = _collectiblesCounter,
+            elapsedTime = elapsedTime
         };
 
 
@@ -1032,7 +1065,17 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 
 
         string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        string fileName = $"{safeScene}_{log.haptics}_{log.order}_{stamp}_traj.json";
+        string fileName;
+        if (!string.IsNullOrEmpty(customFilePrefix))
+        {
+            string safePrefix = MakeFileSafe(customFilePrefix);
+            // Add .json extension if not already present
+            fileName = safePrefix.EndsWith(".json") ? safePrefix : $"{safePrefix}.json";
+        }
+        else
+        {
+            fileName = $"{safeScene}_{log.haptics}_{log.order}_{stamp}_traj.json";
+        }
         string full = Path.Combine(root, fileName);
 
 
