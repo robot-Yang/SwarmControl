@@ -58,6 +58,13 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     /// </summary>
     public bool IsAvailable => openZenIMU != null;
 
+    /// <summary>
+    /// Returns true if pitch is actively producing left/right movement
+    /// (based on actual movement output, not just angle exceeding deadzone)
+    /// Used to disable conflicting inputs like headset yaw rotation
+    /// </summary>
+    public bool IsPitchActive { get; private set; }
+
     // ============================================
     // UPDATE LOOP
     // ============================================
@@ -128,6 +135,10 @@ public abstract class IMUMovementInputBase : MonoBehaviour
 
         if (invertPitch) forward = -forward;  // Now affects forward/back
         if (invertRoll) right = -right;        // Now affects left/right
+
+        // Check if there's actual left/right movement (pitch controls left/right)
+        // Use a small threshold to ignore floating-point noise
+        IsPitchActive = Mathf.Abs(right) > 0.01f;
 
         // Return as movement vector (X=right, Y=height, Z=forward)
         return new Vector3(right, 0f, forward);
