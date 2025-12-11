@@ -221,10 +221,17 @@ public class InputFusionManager : MonoBehaviour
     /// <summary>
     /// Combines rotation from IMU, Meta Quest headset, and/or traditional input
     /// Priority: IMU > MetaQuest > Traditional
+    /// Note: Meta Quest yaw is disabled when IMU pitch is actively moving the swarm left/right
     /// </summary>
     void FuseRotationInputs()
     {
         float rotation = 0f;
+
+        // Check if IMU pitch is actively controlling left/right movement
+        bool pitchIsActive = useIMUForMovement && 
+                           imuMovementSelector != null && 
+                           imuMovementSelector.ActiveMode != null && 
+                           imuMovementSelector.ActiveMode.IsPitchActive;
 
         // PRIORITY 1: IMU yaw if enabled and available
         if (useIMUForRotation && imuYawInput != null && imuYawInput.IsAvailable)
@@ -232,7 +239,8 @@ public class InputFusionManager : MonoBehaviour
             rotation = imuYawInput.YawRotationRate;
         }
         // PRIORITY 2: Meta Quest headset yaw if enabled and available
-        else if (useMetaQuestForRotation && metaQuestInput != null)
+        // BUT: Disable if pitch is actively moving the swarm left/right (prevents conflicting inputs)
+        else if (useMetaQuestForRotation && metaQuestInput != null && !pitchIsActive)
         {
             rotation = metaQuestInput.HeadsetYawRate;
         }
@@ -291,7 +299,7 @@ public class InputFusionManager : MonoBehaviour
         if (!Application.isPlaying) return;
 
         // Display current input state in top-left corner (for debugging)
-        GUILayout.BeginArea(new Rect(10, 10, 400, 250));
+        GUILayout.BeginArea(new Rect(10, 10, 400, 300));
         GUILayout.Label($"<b>=== INPUT FUSION STATUS ===</b>");
         GUILayout.Label($"Movement: {SwarmMovement}");
         GUILayout.Label($"Spread: {SwarmSpread:F2} (Absolute: {IsSpreadAbsolute})");
@@ -303,6 +311,13 @@ public class InputFusionManager : MonoBehaviour
         GUILayout.Label($"MediaPipe Spread Active: {useMediaPipeForSpread}");
         GUILayout.Label($"MediaPipe Height Active: {useMediaPipeForHeight}");
         GUILayout.Label($"Traditional Fallback: {enableTraditionalFallback}");
+        
+        // Show pitch active status (left/right movement)
+        bool pitchActive = useIMUForMovement && 
+                         imuMovementSelector != null && 
+                         imuMovementSelector.ActiveMode != null && 
+                         imuMovementSelector.ActiveMode.IsPitchActive;
+        GUILayout.Label($"<color=orange>Pitch Active (Yaw Locked): {pitchActive}</color>");
         
         if (useMetaQuestForRotation && metaQuestInput != null)
         {

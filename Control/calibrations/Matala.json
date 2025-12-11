@@ -1,0 +1,20 @@
+{
+    "profile_name": "Matala",
+    "description": "",
+    "min_horizontal": 50.549859550191215,
+    "max_horizontal": 454.50700994359204,
+    "min_vertical": 79.64680467333112,
+    "max_vertical": 434.0913210596357,
+    "neutral_vertical": 294.52820641653875,
+    "smooth_alpha": 0.2,
+    "horizontal_linearization": {
+        "type": "linear",
+        "slope": 1.0,
+        "intercept": 0.0
+    },
+    "vertical_linearization": {
+        "type": "linear",
+        "slope": 1.0,
+        "intercept": 0.0
+    }
+}
