@@ -2527,7 +2527,7 @@ MonoBehaviour:
   mediaPipeSpreadInput: {fileID: 1134678124}
   mediaPipeHeightInput: {fileID: 1134678125}
   useIMUForMovement: 1
-  useMetaQuestForRotation: 1
+  useMetaQuestForRotation: 0
   useIMUForRotation: 0
   useMediaPipeForSpread: 0
   useMediaPipeForHeight: 0
