@@ -15,6 +15,10 @@ public class MetaQuestInput : MonoBehaviour
     [Range(0.1f, 5.0f)]
     public float rotationSensitivity = 1.0f;
 
+    [Tooltip("Response curve exponent (1 = linear, 2 = squared). Higher = more precise at small head turns")]
+    [Range(1f, 3f)]
+    public float responseCurve = 2.0f;
+
     [Tooltip("Ignore yaw angles smaller than this (degrees) - same as IMU deadzone")]
     [Range(0f, 30f)]
     public float yawDeadzone = 5f;
@@ -176,8 +180,11 @@ public class MetaQuestInput : MonoBehaviour
         // Normalize to 0-1 range for mapping (matching IMU logic)
         float yawNormalized = Mathf.Clamp01(Mathf.Abs(yaw) / yawMaxAngle);
 
-        // Apply sensitivity as curve multiplier (matching IMU)
-        float yawMapped = yawNormalized * rotationSensitivity;
+        // Apply response curve for better control feel
+        float curved = Mathf.Pow(yawNormalized, responseCurve);
+
+        // Apply sensitivity multiplier
+        float yawMapped = curved * rotationSensitivity;
 
         // Restore sign (positive = right, negative = left)
         HeadsetYawRate = Mathf.Sign(yaw) * yawMapped;

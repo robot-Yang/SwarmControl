@@ -14,6 +14,16 @@ public class MediaPipeHeightInput : MonoBehaviour
     [Tooltip("Maximum vertical speed (units/second) when hands at extreme positions")]
     public float maxVerticalSpeed = 2.0f;
 
+    [Header("Response Curve")]
+    [Tooltip("Response curve exponent (1 = linear, 2 = squared). Higher = more precise at small movements")]
+    [Range(1f, 3f)]
+    public float responseCurve = 2.0f;
+
+    [Header("Deadzone")]
+    [Tooltip("Ignore height values within this range of neutral (0 = no deadzone)")]
+    [Range(0f, 0.5f)]
+    public float heightDeadzone = 0.1f;
+
     [Header("Smoothing")]
     [Tooltip("Smoothing factor (0 = no smoothing, 1 = max smoothing)")]
     [Range(0f, 0.95f)]
@@ -52,8 +62,19 @@ public class MediaPipeHeightInput : MonoBehaviour
             // Get raw height from WebSocket (-1..+1, 0 = neutral)
             float rawHeight = webSocketClient.HandHeight;
 
+            // Apply deadzone (ignore values near neutral)
+            if (Mathf.Abs(rawHeight) < heightDeadzone)
+            {
+                rawHeight = 0f;
+            }
+
+            // Apply response curve for better control
+            float sign = Mathf.Sign(rawHeight);
+            float magnitude = Mathf.Abs(rawHeight);
+            float curved = Mathf.Pow(magnitude, responseCurve) * sign;
+
             // Apply smoothing
-            _smoothedHeight = Mathf.Lerp(_smoothedHeight, rawHeight, 1f - smoothing);
+            _smoothedHeight = Mathf.Lerp(_smoothedHeight, curved, 1f - smoothing);
 
             // Output is already in -1..+1 rate format
             HeightControl = _smoothedHeight;

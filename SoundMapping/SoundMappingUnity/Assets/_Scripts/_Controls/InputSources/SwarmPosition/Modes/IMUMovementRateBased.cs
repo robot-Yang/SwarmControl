@@ -15,19 +15,26 @@ public class IMUMovementRateBased : IMUMovementInputBase
     [Tooltip("Maximum left/right speed (units/second) at full roll tilt")]
     public float maxRollSpeed = 4.0f;
 
+    [Header("Response Curve")]
+    [Tooltip("Response curve exponent (1 = linear, 2 = squared, 3 = cubic). Higher = more precise at small tilts, faster at large tilts")]
+    [Range(1f, 3f)]
+    public float responseCurve = 2.0f;
+
     /// <summary>
-    /// Linear mapping for pitch (forward/backward)
+    /// Curved mapping for pitch (forward/backward)
     /// </summary>
     protected override float ApplyPitchMappingCurve(float normalizedInput)
     {
-        return normalizedInput * maxPitchSpeed;
+        // Apply power curve for better control feel
+        return Mathf.Pow(normalizedInput, responseCurve) * maxPitchSpeed;
     }
 
     /// <summary>
-    /// Linear mapping for roll (left/right)
+    /// Curved mapping for roll (left/right)
     /// </summary>
     protected override float ApplyRollMappingCurve(float normalizedInput)
     {
-        return normalizedInput * maxRollSpeed;
+        // Apply power curve for better control feel
+        return Mathf.Pow(normalizedInput, responseCurve) * maxRollSpeed;
     }
 }

@@ -17,6 +17,16 @@ public class MediaPipeSpreadInput : MonoBehaviour
     [Tooltip("Maximum swarm separation (meters) at distance=1")]
     public float maxSwarmSeparation = 10.0f;
 
+    [Header("Response Curve")]
+    [Tooltip("Response curve exponent (1 = linear, 2 = squared). Higher = more precise at small spreads")]
+    [Range(1f, 3f)]
+    public float responseCurve = 2.0f;
+
+    [Header("Deadzone")]
+    [Tooltip("Ignore spread values below this threshold (0 = no deadzone)")]
+    [Range(0f, 0.3f)]
+    public float spreadDeadzone = 0.05f;
+
     [Header("Smoothing")]
     [Tooltip("Smoothing factor (0 = no smoothing, 1 = max smoothing)")]
     [Range(0f, 0.95f)]
@@ -54,8 +64,17 @@ public class MediaPipeSpreadInput : MonoBehaviour
             // Get raw distance from WebSocket (0..1)
             float rawDistance = webSocketClient.HandDistance;
 
+            // Apply deadzone (ignore very small spread values)
+            if (rawDistance < spreadDeadzone)
+            {
+                rawDistance = 0f;
+            }
+
+            // Apply response curve for better control (more precision at small spreads)
+            float curved = Mathf.Pow(rawDistance, responseCurve);
+
             // Apply smoothing
-            _smoothedDistance = Mathf.Lerp(_smoothedDistance, rawDistance, 1f - smoothing);
+            _smoothedDistance = Mathf.Lerp(_smoothedDistance, curved, 1f - smoothing);
 
             // Map to swarm separation range
             SpreadControl = Mathf.Lerp(minSwarmSeparation, maxSwarmSeparation, _smoothedDistance);

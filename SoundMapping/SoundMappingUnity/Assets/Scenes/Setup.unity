@@ -753,7 +753,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 20.05
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -1104,7 +1104,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10.95
+  m_fontSize: 20
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -2299,7 +2299,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 10.9
+  m_fontSize: 20
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -2501,7 +2501,6 @@ GameObject:
   - component: {fileID: 1134678125}
   - component: {fileID: 1134678124}
   - component: {fileID: 1134678129}
-  - component: {fileID: 1134678130}
   m_Layer: 0
   m_Name: InputManager
   m_TagString: Untagged
@@ -2524,10 +2523,10 @@ MonoBehaviour:
   traditionalInput: {fileID: 1134678109}
   imuMovementSelector: {fileID: 1134678129}
   metaQuestInput: {fileID: 1134678111}
-  imuYawInput: {fileID: 1134678130}
+  imuYawInput: {fileID: 0}
   mediaPipeSpreadInput: {fileID: 1134678124}
   mediaPipeHeightInput: {fileID: 1134678125}
-  useIMUForMovement: 0
+  useIMUForMovement: 1
   useMetaQuestForRotation: 1
   useIMUForRotation: 0
   useMediaPipeForSpread: 0
@@ -2603,10 +2602,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   cameraRig: {fileID: 1940585593}
   rotationSensitivity: 0.8
-  yawDeadzone: 10
-  yawMaxAngle: 25
+  responseCurve: 1
+  yawDeadzone: 15
+  yawMaxAngle: 40
   calibrateKey: 99
-  smoothTime: 0.25
+  smoothTime: 0.15
   showDebugInfo: 0
 --- !u!114 &1134678124
 MonoBehaviour:
@@ -2623,6 +2623,8 @@ MonoBehaviour:
   webSocketClient: {fileID: 1134678126}
   minSwarmSeparation: 1
   maxSwarmSeparation: 5
+  responseCurve: 1
+  spreadDeadzone: 0.1
   smoothing: 0.3
 --- !u!114 &1134678125
 MonoBehaviour:
@@ -2637,7 +2639,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   webSocketClient: {fileID: 1134678126}
-  maxVerticalSpeed: 2
+  maxVerticalSpeed: 1
+  responseCurve: 1
+  heightDeadzone: 0.1
   smoothing: 0.3
 --- !u!114 &1134678126
 MonoBehaviour:
@@ -2667,13 +2671,14 @@ MonoBehaviour:
   pitchMaxAngle: 30
   rollMaxAngle: 30
   pitchDeadzone: 5
-  rollDeadzone: 5
+  rollDeadzone: 3
   invertPitch: 0
   invertRoll: 1
   calibrateKey: 99
   autoCalibrateOnStart: 1
   maxPitchSpeed: 2
-  maxRollSpeed: 3
+  maxRollSpeed: 2
+  responseCurve: 1
 --- !u!114 &1134678129
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2690,26 +2695,6 @@ MonoBehaviour:
   linearMode: {fileID: 0}
   exponentialMode: {fileID: 0}
   rateBasedMode: {fileID: 1134678127}
---- !u!114 &1134678130
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1134678106}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 85706a0a4d656c14390cc9fd6af55003, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  openZenIMU: {fileID: 1134678108}
-  yawMaxAngle: 45
-  yawDeadzone: 5
-  maxRotationSpeed: 2
-  invertYaw: 0
-  calibrateKey: 118
-  autoCalibrateOnStart: 1
-  showDebugInfo: 0
 --- !u!1 &1179672691
 GameObject:
   m_ObjectHideFlags: 0
@@ -2794,7 +2779,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 20.05
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3153,7 +3138,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 20.05
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3395,7 +3380,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 15.35
+  m_fontSize: 20
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3663,7 +3648,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 20.05
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -4862,7 +4847,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 19.05
+  m_fontSize: 20
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -6313,7 +6298,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 8.93
+  m_fontSize: 20.05
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
