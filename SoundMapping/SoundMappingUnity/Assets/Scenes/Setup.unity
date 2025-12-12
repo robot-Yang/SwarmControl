@@ -753,7 +753,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 12.25
+  m_fontSize: 8.93
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -1104,7 +1104,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 14.6
+  m_fontSize: 10.95
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -1579,7 +1579,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ba3713d74f5de4dc6b062b4c2bd19d82, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  cameraHeight: 15
+  cameraHeight: 30
   followSmoothness: 5
   orthographicSize: 10
   rotateWithDrone: 1
@@ -1626,7 +1626,7 @@ Camera:
     height: 1
   near clip plane: 0.3
   far clip plane: 1000
-  field of view: 26.991467
+  field of view: 50
   orthographic: 0
   orthographic size: 5
   m_Depth: 0
@@ -2299,7 +2299,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 15.05
+  m_fontSize: 10.9
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -2673,7 +2673,7 @@ MonoBehaviour:
   calibrateKey: 99
   autoCalibrateOnStart: 1
   maxPitchSpeed: 2
-  maxRollSpeed: 2
+  maxRollSpeed: 3
 --- !u!114 &1134678129
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2794,7 +2794,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 12.25
+  m_fontSize: 8.93
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3153,7 +3153,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 12.2
+  m_fontSize: 8.93
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3395,7 +3395,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 17.3
+  m_fontSize: 15.35
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -3663,7 +3663,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 12.3
+  m_fontSize: 8.93
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -4311,12 +4311,13 @@ MonoBehaviour:
   droneLayer:
     serializedVersion: 2
     m_Bits: 128
-  spawnHeight: 10
+  spawnHeight: 15
   radius: 10
   migrationPoint: {x: 0, y: 0}
   normalMaterial: {fileID: 2100000, guid: 3d0ff9fe2342035478da2ac0c2bafcf1, type: 2}
   selectedMaterial: {fileID: 2100000, guid: ea2740c202d629d46883c000bb8326dc, type: 2}
   deltaMigration: {x: 0, y: 0, z: 0}
+  spreadSpeed: 1.5
   useGlobalHeading: 1
   headingSmooth: 5
   autoSwitchFrontmost: 1
@@ -4601,7 +4602,7 @@ MonoBehaviour:
   swarmRootName: Swarm
   rescanChildrenEverySec: 1
   droneComponentTypeName: DroneController
-  sampleHz: 25
+  sampleHz: 15
   waitForDronesToStart: 1
   recordHz: 0
   recordEveryNthSample: 1
@@ -4861,7 +4862,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 15.55
+  m_fontSize: 19.05
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1
@@ -6312,7 +6313,7 @@ MonoBehaviour:
   m_faceColor:
     serializedVersion: 2
     rgba: 4294967295
-  m_fontSize: 12.25
+  m_fontSize: 8.93
   m_fontSizeBase: 36
   m_fontWeight: 400
   m_enableAutoSizing: 1

@@ -41,7 +41,7 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 
     [Header("Sampling")]
     [Tooltip("Samples per second (<=0 = every Update).")]
-    public float sampleHz = 30f;
+    public float sampleHz = 15f;
     [Tooltip("Wait to start sampling until at least one drone is found.")]
     public bool waitForDronesToStart = true;
 

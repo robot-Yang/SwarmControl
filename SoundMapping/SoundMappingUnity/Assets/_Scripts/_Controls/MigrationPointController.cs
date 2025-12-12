@@ -25,8 +25,12 @@ public class MigrationPointController : MonoBehaviour
     public static Vector3 alignementVector = new Vector3(0, 0, 0);
     public static Vector3 alignementVectorNonZero = new Vector3(0, 0, 0);
 
+    [Header("Spread Control")]
     public static float maxSpreadness = 5f;
     public static float minSpreadness = 1f;
+    [Tooltip("Speed multiplier for rate-based spread control (keyboard/controller)")]
+    [Range(0.1f, 5.0f)]
+    public float spreadSpeed = 1.3f;
 
     public static bool InControl = true;
 
@@ -631,7 +635,7 @@ public class MigrationPointController : MonoBehaviour
             // Apply rate to current separation
             if(spreadValue != 0)
             {
-                swarmModel.desiredSeparation += spreadValue * Time.deltaTime * 1.3f;
+                swarmModel.desiredSeparation += spreadValue * Time.deltaTime * spreadSpeed;
                 swarmModel.desiredSeparation = Mathf.Clamp(swarmModel.desiredSeparation, minSpreadness, maxSpreadness);
             }
         }
