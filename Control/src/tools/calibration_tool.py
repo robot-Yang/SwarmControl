@@ -33,6 +33,10 @@ def main():
         print("Error: Cannot open camera")
         return
     
+    # Create fullscreen window
+    cv2.namedWindow("Calibration Tool", cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty("Calibration Tool", cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+    
     # Calibration state
     state = "min_horizontal"
     samples = {
@@ -211,9 +215,10 @@ def main():
                 }
             }
             
-            # Save to JSON
-            Path("calibrations").mkdir(exist_ok=True)
-            filepath = Path("calibrations") / f"{profile_name}.json"
+            # Save to JSON in Control/calibrations/ folder
+            calibrations_dir = Path(__file__).parent.parent.parent / "calibrations"
+            calibrations_dir.mkdir(exist_ok=True)
+            filepath = calibrations_dir / f"{profile_name}.json"
             
             with open(filepath, 'w') as f:
                 json.dump(calibration, f, indent=4)
