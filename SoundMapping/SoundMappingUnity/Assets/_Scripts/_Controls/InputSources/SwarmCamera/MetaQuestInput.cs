@@ -10,17 +10,11 @@ public class MetaQuestInput : MonoBehaviour
     [Tooltip("Reference to the OVRCameraRig in your scene")]
     public OVRCameraRig cameraRig;
 
-    public enum RotationMode { RateBased, Absolute }
-
     [Header("Rotation Settings")]
-    [Tooltip("Control mode: RateBased (velocity) or Absolute (position mapping)")]
-    public RotationMode rotationMode = RotationMode.Absolute;
-
     [Tooltip("Multiplier for head rotation sensitivity (1.0 = normal, 2.0 = twice as fast)")]
     [Range(0.1f, 5.0f)]
     public float rotationSensitivity = 1.0f;
 
-    [Header("Rate-Based Settings (only used if mode = RateBased)")]
     [Tooltip("Ignore yaw angles smaller than this (degrees) - same as IMU deadzone")]
     [Range(0f, 30f)]
     public float yawDeadzone = 5f;
@@ -29,26 +23,14 @@ public class MetaQuestInput : MonoBehaviour
     [Range(10f, 90f)]
     public float yawMaxAngle = 30f;
 
-    [Header("Absolute Mode Settings (only used if mode = Absolute)")]
-    [Tooltip("Maximum head yaw angle left (-90 = max left rotation speed)")]
-    [Range(-180f, 0f)]
-    public float maxYawLeft = -90f;
-
-    [Tooltip("Maximum head yaw angle right (+90 = max right rotation speed)")]
-    [Range(0f, 180f)]
-    public float maxYawRight = 90f;
-
-    [Tooltip("Deadzone angle from neutral (degrees) - no rotation within this range")]
-    [Range(0f, 30f)]
-    public float neutralDeadzone = 5f;
-
-    [Tooltip("Duration (seconds) head must stay rotated before return movement is ignored. 0 = always ignore returns.")]
-    [Range(0f, 5f)]
-    public float holdDuration = 0.5f;
-
     [Header("Calibration")]
     [Tooltip("Press this key to calibrate neutral yaw position (sets current direction as forward)")]
     public KeyCode calibrateKey = KeyCode.C;
+
+    [Header("Smoothing")]
+    [Tooltip("Time to reach target rotation (lower = faster response, higher = smoother). 0 = no smoothing.")]
+    [Range(0f, 0.5f)]
+    public float smoothTime = 0.1f;
 
     [Header("Debug")]
     public bool showDebugInfo = true;
@@ -80,8 +62,8 @@ public class MetaQuestInput : MonoBehaviour
     private float _previousYaw = 0f;
     private bool _initialized = false;
     private float _neutralYaw = 0f; // The "forward" reference point (calibrated neutral)
-    private float _holdTimer = 0f; // Time spent outside deadzone
-    private bool _isHoldActive = false; // True when hold duration has been met
+    private float _smoothedYawRate = 0f; // Smoothed output value
+    private float _yawVelocity = 0f; // Velocity for SmoothDamp
 
     // ============================================
     // INITIALIZATION
@@ -119,7 +101,7 @@ public class MetaQuestInput : MonoBehaviour
     // UPDATE LOOP
     // ============================================
 
-    void Update()
+    void LateUpdate()
     {
         if (!IsHeadsetAvailable())
         {
@@ -138,16 +120,7 @@ public class MetaQuestInput : MonoBehaviour
         }
 
         UpdateHeadsetData();
-
-        // Use different calculation based on mode
-        if (rotationMode == RotationMode.RateBased)
-        {
-            CalculateYawRate();
-        }
-        else
-        {
-            CalculateAbsoluteYawRate();
-        }
+        CalculateYawRate();
     }
 
     /// <summary>
@@ -212,6 +185,13 @@ public class MetaQuestInput : MonoBehaviour
         // Clamp final output to -1 to +1
         HeadsetYawRate = Mathf.Clamp(HeadsetYawRate, -1f, 1f);
 
+        // Apply smoothing
+        if (smoothTime > 0f)
+        {
+            _smoothedYawRate = Mathf.SmoothDamp(_smoothedYawRate, HeadsetYawRate, ref _yawVelocity, smoothTime);
+            HeadsetYawRate = _smoothedYawRate;
+        }
+
         // Store for next frame
         _previousYaw = CurrentYaw;
 
@@ -219,85 +199,6 @@ public class MetaQuestInput : MonoBehaviour
         if (showDebugInfo)
         {
             Debug.Log($"[MetaQuest RateBased] CurrentYaw: {CurrentYaw:F1}° | Neutral: {_neutralYaw:F1}° | Relative: {relativeYaw:F1}° | Normalized: {yawNormalized:F2} | Output: {HeadsetYawRate:F2}");
-        }
-    }
-
-    /// <summary>
-    /// Calculate rotation based on absolute head position (angle from neutral)
-    /// ABSOLUTE MODE: Only responds to outward movements (0→-90 or 0→+90)
-    /// Returns to neutral are ignored after holdDuration expires
-    /// </summary>
-    void CalculateAbsoluteYawRate()
-    {
-        // Calculate angle relative to neutral reference point
-        float relativeYaw = Mathf.DeltaAngle(_neutralYaw, CurrentYaw);
-
-        // Check if inside deadzone (back at neutral)
-        if (Mathf.Abs(relativeYaw) < neutralDeadzone)
-        {
-            HeadsetYawRate = 0f;
-            _holdTimer = 0f; // Reset timer when back at neutral
-            _isHoldActive = false;
-            _previousYaw = CurrentYaw;
-            return;
-        }
-
-        // Head is outside deadzone - update hold timer
-        _holdTimer += Time.deltaTime;
-        if (_holdTimer >= holdDuration)
-        {
-            _isHoldActive = true;
-        }
-
-        float output = 0f;
-        float deltaYaw = Mathf.DeltaAngle(_previousYaw, CurrentYaw);
-
-        if (relativeYaw > 0) // Turned right from neutral
-        {
-            // Apply rotation if:
-            // 1. Moving AWAY from neutral (outward), OR
-            // 2. Moving toward neutral BUT hold is NOT active yet (quick return)
-            if (deltaYaw > 0) // Still moving right (away from neutral)
-            {
-                // Map angle to rotation rate: 0° to maxYawRight
-                float normalized = Mathf.Clamp01((relativeYaw - neutralDeadzone) / (maxYawRight - neutralDeadzone));
-                output = normalized * rotationSensitivity;
-            }
-            else if (deltaYaw <= 0 && !_isHoldActive) // Returning toward neutral before hold expires
-            {
-                // Still apply counter-rotation (quick return)
-                float normalized = Mathf.Clamp01((relativeYaw - neutralDeadzone) / (maxYawRight - neutralDeadzone));
-                output = normalized * rotationSensitivity;
-            }
-            // If deltaYaw <= 0 AND _isHoldActive, we're returning after hold - output stays 0 (ignored)
-        }
-        else if (relativeYaw < 0) // Turned left from neutral
-        {
-            // Apply rotation if:
-            // 1. Moving AWAY from neutral (outward), OR
-            // 2. Moving toward neutral BUT hold is NOT active yet (quick return)
-            if (deltaYaw < 0) // Still moving left (away from neutral)
-            {
-                // Map angle to rotation rate: 0° to maxYawLeft
-                float normalized = Mathf.Clamp01((Mathf.Abs(relativeYaw) - neutralDeadzone) / (Mathf.Abs(maxYawLeft) - neutralDeadzone));
-                output = -normalized * rotationSensitivity;
-            }
-            else if (deltaYaw >= 0 && !_isHoldActive) // Returning toward neutral before hold expires
-            {
-                // Still apply counter-rotation (quick return)
-                float normalized = Mathf.Clamp01((Mathf.Abs(relativeYaw) - neutralDeadzone) / (Mathf.Abs(maxYawLeft) - neutralDeadzone));
-                output = -normalized * rotationSensitivity;
-            }
-            // If deltaYaw >= 0 AND _isHoldActive, we're returning after hold - output stays 0 (ignored)
-        }
-
-        HeadsetYawRate = output;
-        _previousYaw = CurrentYaw;
-
-        // Debug output
-        if (showDebugInfo && Mathf.Abs(HeadsetYawRate) > 0.01f)
-        {
-            Debug.Log($"[MetaQuest Absolute] Yaw: {CurrentYaw:F1}° | Relative: {relativeYaw:F1}° | Hold: {_holdTimer:F2}s/{holdDuration}s | Active: {_isHoldActive} | Output: {HeadsetYawRate:F2}");
         }
     }
 
@@ -330,8 +231,8 @@ public class MetaQuestInput : MonoBehaviour
         HeadsetYawRate = 0f;
         _previousYaw = CurrentYaw;
         _neutralYaw = CurrentYaw;
-        _holdTimer = 0f;
-        _isHoldActive = false;
+        _smoothedYawRate = 0f;
+        _yawVelocity = 0f;
     }
 
     /// <summary>
@@ -343,8 +244,8 @@ public class MetaQuestInput : MonoBehaviour
         if (IsHeadsetAvailable())
         {
             _neutralYaw = CurrentYaw;
-            _holdTimer = 0f;
-            _isHoldActive = false;
+            _smoothedYawRate = 0f;
+            _yawVelocity = 0f;
             Debug.Log($"MetaQuest: Neutral calibrated to {_neutralYaw:F1}°");
         }
     }
@@ -359,21 +260,15 @@ public class MetaQuestInput : MonoBehaviour
 
         GUILayout.BeginArea(new Rect(10, 220, 400, 220));
         GUILayout.Label("<b>=== META QUEST INPUT ===</b>");
-        GUILayout.Label($"Mode: {rotationMode}");
         GUILayout.Label($"OVRCameraRig Assigned: {cameraRig != null}");
         GUILayout.Label($"Headset Available: {IsHeadsetAvailable()}");
         
         if (IsHeadsetAvailable())
         {
             GUILayout.Label($"Current Yaw: {CurrentYaw:F1}°");
-            if (rotationMode == RotationMode.Absolute)
-            {
-                float relativeYaw = Mathf.DeltaAngle(_neutralYaw, CurrentYaw);
-                GUILayout.Label($"Neutral Yaw: {_neutralYaw:F1}°");
-                GUILayout.Label($"Relative to Neutral: {relativeYaw:F1}°");
-                GUILayout.Label($"Hold Timer: {_holdTimer:F2}s / {holdDuration:F1}s");
-                GUILayout.Label($"Hold Active: {_isHoldActive}");
-            }
+            float relativeYaw = Mathf.DeltaAngle(_neutralYaw, CurrentYaw);
+            GUILayout.Label($"Neutral Yaw: {_neutralYaw:F1}°");
+            GUILayout.Label($"Relative to Neutral: {relativeYaw:F1}°");
             GUILayout.Label($"<color=cyan>Yaw Rate OUTPUT: {HeadsetYawRate:F2}</color>");
             GUILayout.Label($"Is Rotating: {IsRotating()}");
         }
