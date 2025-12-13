@@ -39,9 +39,15 @@ public abstract class IMUMovementInputBase : MonoBehaviour
     [Header("Auto-Calibration")]
     [Tooltip("Automatically calibrate neutral position on Start (not needed if OpenZenMoveObject already calibrates)")]
     public bool autoCalibrateOnStart = false;
+
+    [Header("Smoothing")]
+    [Tooltip("Movement smoothing factor (0 = no smoothing/instant, 1 = maximum smoothing). Higher values reduce jitter but add slight lag.")]
+    [Range(0f, 1f)]
+    public float smoothingFactor = 0.3f;
     
     private Vector3 _calibrationOffset = Vector3.zero;
     private bool _initialized = false;
+    private Vector3 _smoothedMovementVector = Vector3.zero;
 
     // ============================================
     // OUTPUT PROPERTIES
@@ -91,11 +97,21 @@ public abstract class IMUMovementInputBase : MonoBehaviour
             // Apply optional second-layer calibration if enabled
             if (autoCalibrateOnStart || _calibrationOffset != Vector3.zero)
                 angles -= _calibrationOffset;
-            MovementVector = ConvertIMUToMovement(angles);
+            
+            // Get raw movement from IMU
+            Vector3 rawMovement = ConvertIMUToMovement(angles);
+            
+            // Apply smoothing to reduce jitter and inconsistent speed
+            // Lerp towards target: higher smoothing = slower transition = smoother but more lag
+            float smoothSpeed = 1f - smoothingFactor;
+            _smoothedMovementVector = Vector3.Lerp(_smoothedMovementVector, rawMovement, smoothSpeed * Time.deltaTime * 10f);
+            
+            MovementVector = _smoothedMovementVector;
         }
         else
         {
             MovementVector = Vector3.zero;
+            _smoothedMovementVector = Vector3.zero;
         }
     }
 

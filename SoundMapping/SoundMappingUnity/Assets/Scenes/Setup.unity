@@ -2623,7 +2623,7 @@ MonoBehaviour:
   webSocketClient: {fileID: 1134678126}
   minSwarmSeparation: 1
   maxSwarmSeparation: 5
-  responseCurve: 1
+  responseCurve: 2
   spreadDeadzone: 0.1
   smoothing: 0.3
 --- !u!114 &1134678125
@@ -2640,8 +2640,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   webSocketClient: {fileID: 1134678126}
   maxVerticalSpeed: 1
-  responseCurve: 1
-  heightDeadzone: 0.1
+  responseCurve: 2
+  heightDeadzone: 0.2
   smoothing: 0.3
 --- !u!114 &1134678126
 MonoBehaviour:
@@ -2668,17 +2668,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   openZenIMU: {fileID: 1134678108}
-  pitchMaxAngle: 30
-  rollMaxAngle: 30
-  pitchDeadzone: 5
-  rollDeadzone: 3
+  pitchMaxAngle: 15
+  rollMaxAngle: 20
+  pitchDeadzone: 3
+  rollDeadzone: 5
   invertPitch: 0
   invertRoll: 1
   calibrateKey: 99
   autoCalibrateOnStart: 1
-  maxPitchSpeed: 2
+  smoothingFactor: 0.3
+  maxPitchSpeed: 3
   maxRollSpeed: 2
-  responseCurve: 1
+  responseCurve: 1.3
 --- !u!114 &1134678129
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4296,13 +4297,13 @@ MonoBehaviour:
   droneLayer:
     serializedVersion: 2
     m_Bits: 128
-  spawnHeight: 15
+  spawnHeight: 25
   radius: 10
   migrationPoint: {x: 0, y: 0}
   normalMaterial: {fileID: 2100000, guid: 3d0ff9fe2342035478da2ac0c2bafcf1, type: 2}
   selectedMaterial: {fileID: 2100000, guid: ea2740c202d629d46883c000bb8326dc, type: 2}
   deltaMigration: {x: 0, y: 0, z: 0}
-  spreadSpeed: 1.5
+  spreadSpeed: 1.7
   useGlobalHeading: 1
   headingSmooth: 5
   autoSwitchFrontmost: 1
