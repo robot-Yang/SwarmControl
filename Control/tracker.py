@@ -157,6 +157,11 @@ def main():
         print("Error: Cannot open camera")
         return
     
+    # Create resizable window
+    window_name = "Hand Tracker - Drone Control"
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window_name, 1280, 720)  # Set initial size
+    
     print("Starting tracking... Press 'q' to quit\n")
     
     while True:
@@ -196,7 +201,7 @@ def main():
         cv2.putText(frame, f"Profile: {CALIBRATION_PROFILE} | Press 'q' to quit", 
                    (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
         
-        cv2.imshow("Hand Tracker - Drone Control", frame)
+        cv2.imshow(window_name, frame)
         
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
