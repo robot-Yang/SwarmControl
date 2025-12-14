@@ -12,7 +12,7 @@ from websocket_server import WebSocketServer
 # ============================================
 # CHOOSE YOUR CALIBRATION PROFILE HERE
 # ============================================
-CALIBRATION_PROFILE = "Darius0"  # Change this to switch profiles
+CALIBRATION_PROFILE = "DariusR"  # Change this to switch profiles
 # ============================================
 
 class HandTracker:
@@ -159,8 +159,7 @@ def main():
     
     # Create resizable window
     window_name = "Hand Tracker - Drone Control"
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window_name, 1280, 720)  # Set initial size
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
     
     print("Starting tracking... Press 'q' to quit\n")
     

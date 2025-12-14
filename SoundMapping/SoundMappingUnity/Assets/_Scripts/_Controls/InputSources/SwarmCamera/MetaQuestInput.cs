@@ -130,7 +130,7 @@ public class MetaQuestInput : MonoBehaviour
     /// <summary>
     /// Check if headset tracking is available
     /// </summary>
-    bool IsHeadsetAvailable()
+    public bool IsHeadsetAvailable()
     {
         return cameraRig != null && cameraRig.centerEyeAnchor != null;
     }

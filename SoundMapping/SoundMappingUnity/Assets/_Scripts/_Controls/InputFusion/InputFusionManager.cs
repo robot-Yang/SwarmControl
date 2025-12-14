@@ -56,6 +56,12 @@ public class InputFusionManager : MonoBehaviour
     public bool enableTraditionalFallback = true;
 
     // ============================================
+    // CALIBRATION STATE
+    // ============================================
+    private bool isCalibrating = false;
+    private float calibrationCountdown = 0f;
+
+    // ============================================
     // FUSED OUTPUT PROPERTIES (Read by other systems)
     // ============================================
     // Fused Outputs (Read-Only) - these are computed from all input sources
@@ -86,6 +92,7 @@ public class InputFusionManager : MonoBehaviour
     public bool EmbodimentPressed { get; private set; }
     public bool DisembodimentPressed { get; private set; }
     public bool ToggleDummyForcesPressed { get; private set; }
+    public bool CalibratePressed { get; private set; }
 
     // ============================================
     // INITIALIZATION
@@ -137,11 +144,28 @@ public class InputFusionManager : MonoBehaviour
     // ============================================
     void Update()
     {
+        // Handle calibration countdown
+        if (isCalibrating)
+        {
+            calibrationCountdown -= Time.deltaTime;
+            if (calibrationCountdown <= 0f)
+            {
+                PerformCalibration();
+                isCalibrating = false;
+            }
+        }
+
         FuseMovementInputs();
         FuseHeightInputs();
         FuseSpreadInputs();
         FuseRotationInputs();
         FuseButtonInputs();
+
+        // Check for calibration button press
+        if (CalibratePressed && !isCalibrating)
+        {
+            StartCalibration();
+        }
     }
 
     /// <summary>
@@ -151,6 +175,13 @@ public class InputFusionManager : MonoBehaviour
     void FuseMovementInputs()
     {
         Vector3 movement = Vector3.zero;
+
+        // BLOCK movement during calibration
+        if (isCalibrating)
+        {
+            SwarmMovement = Vector3.zero;
+            return;
+        }
 
         // PRIMARY: Use IMU if enabled and available
         if (useIMUForMovement && imuMovementSelector != null && imuMovementSelector.ActiveMode != null)
@@ -204,6 +235,13 @@ public class InputFusionManager : MonoBehaviour
     {
         float spread = 0f;
 
+        // BLOCK spread during calibration
+        if (isCalibrating)
+        {
+            SwarmSpread = 0f;
+            return;
+        }
+
         // PRIMARY: MediaPipe webcam tracking (if enabled and available)
         if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
         {
@@ -226,6 +264,13 @@ public class InputFusionManager : MonoBehaviour
     void FuseRotationInputs()
     {
         float rotation = 0f;
+
+        // BLOCK rotation during calibration
+        if (isCalibrating)
+        {
+            CameraRotation = 0f;
+            return;
+        }
 
         // Check if IMU pitch is actively controlling left/right movement
         bool pitchIsActive = useIMUForMovement && 
@@ -266,6 +311,7 @@ public class InputFusionManager : MonoBehaviour
             EmbodimentPressed = traditionalInput.EmbodimentPressed;
             DisembodimentPressed = traditionalInput.DisembodimentPressed;
             ToggleDummyForcesPressed = traditionalInput.ToggleDummyForcesPressed;
+            CalibratePressed = traditionalInput.CalibratePressed;
         }
     }
 
@@ -292,6 +338,80 @@ public class InputFusionManager : MonoBehaviour
     }
 
     // ============================================
+    // CALIBRATION METHODS
+    // ============================================
+
+    /// <summary>
+    /// Starts the calibration process - blocks all inputs and waits 5 seconds
+    /// </summary>
+    void StartCalibration()
+    {
+        isCalibrating = true;
+        calibrationCountdown = 15f;
+        Debug.Log("=== CALIBRATION STARTED - Hold steady for 5 seconds ===");
+    }
+
+    /// <summary>
+    /// Performs the actual calibration of IMU and headset after countdown
+    /// </summary>
+    void PerformCalibration()
+    {
+        Debug.Log("=== PERFORMING CALIBRATION ===");
+
+        // Calibrate IMU movement (all modes)
+        if (imuMovementSelector != null && imuMovementSelector.ActiveMode != null)
+        {
+            imuMovementSelector.ActiveMode.CalibrateNeutral();
+            Debug.Log("✓ IMU movement calibrated");
+        }
+
+        // Calibrate Meta Quest headset yaw
+        if (metaQuestInput != null && metaQuestInput.IsHeadsetAvailable())
+        {
+            metaQuestInput.CalibrateNeutral();
+            Debug.Log("✓ Meta Quest headset yaw calibrated");
+        }
+
+        // Calibrate IMU yaw input
+        if (imuYawInput != null && imuYawInput.IsAvailable)
+        {
+            imuYawInput.CalibrateNeutral();
+            Debug.Log("✓ IMU yaw calibrated");
+        }
+
+        Debug.Log("=== CALIBRATION COMPLETE ===");
+
+        // Activate all calibrated input sources
+        Debug.Log("=== ACTIVATING INPUT SOURCES ===");
+        
+        if (imuMovementSelector != null && imuMovementSelector.ActiveMode != null)
+        {
+            useIMUForMovement = true;
+            Debug.Log("✓ IMU movement control ACTIVATED");
+        }
+
+        if (metaQuestInput != null && metaQuestInput.IsHeadsetAvailable())
+        {
+            useMetaQuestForRotation = true;
+            Debug.Log("✓ Meta Quest rotation ACTIVATED");
+        }
+
+        if (mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
+        {
+            useMediaPipeForSpread = true;
+            Debug.Log("✓ MediaPipe spread control ACTIVATED");
+        }
+
+        if (mediaPipeHeightInput != null && mediaPipeHeightInput.IsAvailable)
+        {
+            useMediaPipeForHeight = true;
+            Debug.Log("✓ MediaPipe height control ACTIVATED");
+        }
+
+        Debug.Log("=== ALL SYSTEMS ACTIVE ===");
+    }
+
+    // ============================================
     // DEBUG VISUALIZATION
     // ============================================
     void OnGUI()
@@ -301,6 +421,13 @@ public class InputFusionManager : MonoBehaviour
         // Display current input state in top-left corner (for debugging)
         GUILayout.BeginArea(new Rect(10, 10, 400, 300));
         GUILayout.Label($"<b>=== INPUT FUSION STATUS ===</b>");
+        
+        // Show calibration status prominently
+        if (isCalibrating)
+        {
+            GUILayout.Label($"<color=yellow><b>⏱ CALIBRATING in {calibrationCountdown:F1}s - HOLD STEADY!</b></color>");
+        }
+        
         GUILayout.Label($"Movement: {SwarmMovement}");
         GUILayout.Label($"Spread: {SwarmSpread:F2}");
         GUILayout.Label($"Camera Rotation OUTPUT: {CameraRotation:F2}");

@@ -23,6 +23,7 @@ public class TraditionalInput : MonoBehaviour
     public bool EmbodimentPressed { get; private set; }         // Button 0
     public bool DisembodimentPressed { get; private set; }      // Button 1
     public bool ToggleDummyForcesPressed { get; private set; }  // Button 3
+    public bool CalibratePressed { get; private set; }          // Button 2 or keyboard key
 
     [Header("Input Axis Names (Unity Input Manager)")]
     [Tooltip("Left stick horizontal or A/D keys")]
@@ -56,6 +57,10 @@ public class TraditionalInput : MonoBehaviour
     public int embodimentButton = 0;
     public int disembodimentButton = 1;
     public int toggleDummyForcesButton = 3;
+    public int calibrateButton = 2;
+    
+    [Tooltip("Keyboard key for calibration (also works as alternative to joystick button)")]
+    public KeyCode calibrateKey = KeyCode.C;
 
     // ============================================
     // UPDATE LOOP
@@ -105,6 +110,9 @@ public class TraditionalInput : MonoBehaviour
 
         // Toggle dummy forces
         ToggleDummyForcesPressed = Input.GetKeyDown("joystick button " + toggleDummyForcesButton);
+
+        // Calibration (joystick button OR keyboard key)
+        CalibratePressed = Input.GetKeyDown("joystick button " + calibrateButton) || Input.GetKeyDown(calibrateKey);
     }
 
     // ============================================
