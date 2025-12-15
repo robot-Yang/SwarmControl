@@ -144,27 +144,16 @@ public class InputFusionManager : MonoBehaviour
     // ============================================
     void Update()
     {
-        // Handle calibration countdown
-        if (isCalibrating)
-        {
-            calibrationCountdown -= Time.deltaTime;
-            if (calibrationCountdown <= 0f)
-            {
-                PerformCalibration();
-                isCalibrating = false;
-            }
-        }
-
         FuseMovementInputs();
         FuseHeightInputs();
         FuseSpreadInputs();
         FuseRotationInputs();
         FuseButtonInputs();
 
-        // Check for calibration button press
-        if (CalibratePressed && !isCalibrating)
+        // Check for calibration button press - calibrate immediately
+        if (CalibratePressed)
         {
-            StartCalibration();
+            PerformCalibration();
         }
     }
 
@@ -176,10 +165,11 @@ public class InputFusionManager : MonoBehaviour
     {
         Vector3 movement = Vector3.zero;
 
-        // BLOCK movement during calibration
+        // STABILIZE during calibration - provide minimal forward velocity to maintain swarm cohesion
         if (isCalibrating)
         {
-            SwarmMovement = Vector3.zero;
+            // Small forward velocity prevents alignmentVector from becoming zero (which causes disconnection)
+            SwarmMovement = new Vector3(0f, 0f, 0.05f); // Gentle forward drift maintains formation
             return;
         }
 
@@ -235,10 +225,10 @@ public class InputFusionManager : MonoBehaviour
     {
         float spread = 0f;
 
-        // BLOCK spread during calibration
+        // FREEZE SPREAD during calibration - no spreading/shrinking
         if (isCalibrating)
         {
-            SwarmSpread = 0f;
+            SwarmSpread = 0f; // Zero spread change during calibration
             return;
         }
 
@@ -265,7 +255,7 @@ public class InputFusionManager : MonoBehaviour
     {
         float rotation = 0f;
 
-        // BLOCK rotation during calibration
+        // STOP rotation during calibration (but allow swarm to hover)
         if (isCalibrating)
         {
             CameraRotation = 0f;
@@ -341,15 +331,7 @@ public class InputFusionManager : MonoBehaviour
     // CALIBRATION METHODS
     // ============================================
 
-    /// <summary>
-    /// Starts the calibration process - blocks all inputs and waits 5 seconds
-    /// </summary>
-    void StartCalibration()
-    {
-        isCalibrating = true;
-        calibrationCountdown = 15f;
-        Debug.Log("=== CALIBRATION STARTED - Hold steady for 5 seconds ===");
-    }
+    // Calibration is now instant - no countdown needed
 
     /// <summary>
     /// Performs the actual calibration of IMU and headset after countdown
@@ -380,35 +362,7 @@ public class InputFusionManager : MonoBehaviour
         }
 
         Debug.Log("=== CALIBRATION COMPLETE ===");
-
-        // Activate all calibrated input sources
-        Debug.Log("=== ACTIVATING INPUT SOURCES ===");
-        
-        if (imuMovementSelector != null && imuMovementSelector.ActiveMode != null)
-        {
-            useIMUForMovement = true;
-            Debug.Log("✓ IMU movement control ACTIVATED");
-        }
-
-        if (metaQuestInput != null && metaQuestInput.IsHeadsetAvailable())
-        {
-            useMetaQuestForRotation = true;
-            Debug.Log("✓ Meta Quest rotation ACTIVATED");
-        }
-
-        if (mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
-        {
-            useMediaPipeForSpread = true;
-            Debug.Log("✓ MediaPipe spread control ACTIVATED");
-        }
-
-        if (mediaPipeHeightInput != null && mediaPipeHeightInput.IsAvailable)
-        {
-            useMediaPipeForHeight = true;
-            Debug.Log("✓ MediaPipe height control ACTIVATED");
-        }
-
-        Debug.Log("=== ALL SYSTEMS ACTIVE ===");
+        Debug.Log("Sensors calibrated. Input sources remain in their current state (not auto-activated).");
     }
 
     // ============================================

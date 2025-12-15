@@ -2571,11 +2571,11 @@ MonoBehaviour:
   imuYawInput: {fileID: 0}
   mediaPipeSpreadInput: {fileID: 1134678124}
   mediaPipeHeightInput: {fileID: 1134678125}
-  useIMUForMovement: 0
+  useIMUForMovement: 1
   useMetaQuestForRotation: 0
   useIMUForRotation: 0
-  useMediaPipeForSpread: 0
-  useMediaPipeForHeight: 0
+  useMediaPipeForSpread: 1
+  useMediaPipeForHeight: 1
   enableTraditionalFallback: 1
 --- !u!114 &1134678108
 MonoBehaviour:
@@ -2715,8 +2715,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   openZenIMU: {fileID: 1134678108}
-  pitchMaxAngle: 15
-  rollMaxAngle: 20
+  pitchMaxAngle: 25
+  rollMaxAngle: 40
   pitchDeadzone: 3
   rollDeadzone: 5
   invertPitch: 0
@@ -2724,7 +2724,7 @@ MonoBehaviour:
   calibrateKey: 99
   autoCalibrateOnStart: 1
   smoothingFactor: 0.3
-  maxPitchSpeed: 3
+  maxPitchSpeed: 2
   maxRollSpeed: 2
   responseCurve: 1.7
 --- !u!114 &1134678129
@@ -4344,13 +4344,13 @@ MonoBehaviour:
   droneLayer:
     serializedVersion: 2
     m_Bits: 128
-  spawnHeight: 7
+  spawnHeight: 17
   radius: 10
   migrationPoint: {x: 0, y: 0}
   normalMaterial: {fileID: 2100000, guid: 3d0ff9fe2342035478da2ac0c2bafcf1, type: 2}
   selectedMaterial: {fileID: 2100000, guid: ea2740c202d629d46883c000bb8326dc, type: 2}
   deltaMigration: {x: 0, y: 0, z: 0}
-  spreadSpeed: 1.7
+  spreadSpeed: 1.5
   useGlobalHeading: 1
   headingSmooth: 5
   autoSwitchFrontmost: 1

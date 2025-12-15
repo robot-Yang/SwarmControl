@@ -12,7 +12,7 @@ from websocket_server import WebSocketServer
 # ============================================
 # CHOOSE YOUR CALIBRATION PROFILE HERE
 # ============================================
-CALIBRATION_PROFILE = "DariusR"  # Change this to switch profiles
+CALIBRATION_PROFILE = "N"  # Change this to switch profiles
 # ============================================
 
 class HandTracker:
