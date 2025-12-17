@@ -16,10 +16,54 @@ import sys
 # ============================================================
 
 def get_trial_window(data):
-    if data.get('trials'):
-        run_trial = next((t for t in data['trials'] if t['label'] == 'Run'), None)
-        if run_trial and run_trial.get('endGameTime', 0) > 0:
-            return run_trial['startGameTime'], run_trial['endGameTime']
+    trials = data.get('trials') or []
+    run_trial = next((t for t in trials if t.get('label') == 'Run'), None)
+    if not run_trial:
+        return 0, float('inf')
+
+    def guess_frame_time_base():
+        """Best-effort guess of whether frame['t'] is closer to gameTime or realtime."""
+        trajectories = data.get('trajectories') or []
+        if not trajectories:
+            return 'game'
+        frames = (trajectories[0].get('frames') or [])
+        if not frames:
+            return 'game'
+
+        t_first = frames[0].get('t')
+        t_last = frames[-1].get('t')
+
+        end_game = run_trial.get('endGameTime')
+        end_real = run_trial.get('endRealtime')
+        if t_last is not None and end_game is not None and end_real is not None:
+            return 'game' if abs(t_last - end_game) <= abs(t_last - end_real) else 'real'
+
+        start_game = run_trial.get('startGameTime')
+        start_real = run_trial.get('startRealtime')
+        if t_first is not None and start_game is not None and start_real is not None:
+            return 'game' if abs(t_first - start_game) <= abs(t_first - start_real) else 'real'
+
+        return 'game'
+
+    # Prefer realtime bounds for plotting (convert to the same time base as frame['t'] when needed)
+    if run_trial.get('endRealtime', 0) > 0 and run_trial.get('startRealtime') is not None:
+        start_rt = run_trial['startRealtime']
+        end_rt = run_trial['endRealtime']
+
+        if (
+            guess_frame_time_base() == 'game'
+            and run_trial.get('startGameTime') is not None
+            and run_trial.get('startRealtime') is not None
+        ):
+            offset = run_trial['startRealtime'] - run_trial['startGameTime']
+            return start_rt - offset, end_rt - offset
+
+        return start_rt, end_rt
+
+    # Fallback to gameTime bounds
+    if run_trial.get('endGameTime', 0) > 0 and run_trial.get('startGameTime') is not None:
+        return run_trial['startGameTime'], run_trial['endGameTime']
+
     return 0, float('inf')
 
 
@@ -68,9 +112,28 @@ def extract_crash_positions(data):
     crash_positions = []
     
     for traj in data.get('trajectories', []):
+        frames = traj.get('frames', [])
+
+        # Initialize prev_e using the last frame strictly before the Run window.
+        # This filters out drones that were already crashed before Run started.
         prev_e = 1
-        for frame in traj.get('frames', []):
-            if start_time <= frame['t'] <= end_time:
+        last_pre = None
+        last_pre_t = None
+        for f in frames:
+            t = f.get('t')
+            if t is None:
+                continue
+            if t < start_time and (last_pre_t is None or t > last_pre_t):
+                last_pre = f
+                last_pre_t = t
+        if last_pre is not None:
+            prev_e = last_pre.get('e', 1)
+
+        for frame in frames:
+            t = frame.get('t')
+            if t is None:
+                continue
+            if start_time <= t <= end_time:
                 curr_e = frame.get('e', 1)
                 if prev_e == 1 and curr_e == 0:
                     crash_positions.append(np.array([frame['x'], frame['y'], frame['z']]))
@@ -92,11 +155,71 @@ def extract_disconnection_points(data):
     return disconnection_points
 
 
+def disconnected_drones_at_run_end(data):
+    start_time, end_time = get_trial_window(data)
+    disconnected_ids = []
+    unknown_ids = []
+
+    for traj in data.get('trajectories', []):
+        tid = traj.get('id')
+        frames = traj.get('frames', [])
+
+        last_in_window = None
+        last_t = None
+        for f in frames:
+            t = f.get('t')
+            if t is None:
+                continue
+            if start_time <= t <= end_time and (last_t is None or t > last_t):
+                last_in_window = f
+                last_t = t
+
+        if last_in_window is None:
+            unknown_ids.append(tid)
+            continue
+
+        if last_in_window.get('g', 1) == 0:
+            disconnected_ids.append(tid)
+
+    return disconnected_ids, unknown_ids
+
+
+def disconnected_positions_at_run_end(data):
+    start_time, end_time = get_trial_window(data)
+    positions = []
+    disconnected_ids = []
+    unknown_ids = []
+
+    for traj in data.get('trajectories', []):
+        tid = traj.get('id')
+        frames = traj.get('frames', [])
+
+        last_in_window = None
+        last_t = None
+        for f in frames:
+            t = f.get('t')
+            if t is None:
+                continue
+            if start_time <= t <= end_time and (last_t is None or t > last_t):
+                last_in_window = f
+                last_t = t
+
+        if last_in_window is None:
+            unknown_ids.append(tid)
+            continue
+
+        if last_in_window.get('g', 1) == 0:
+            disconnected_ids.append(tid)
+            positions.append(np.array([last_in_window['x'], last_in_window['y'], last_in_window['z']]))
+
+    return positions, disconnected_ids, unknown_ids
+
+
 # ============================================================
 # PLOT 1: SWARM vs EMBODIED
 # ============================================================
 
-def plot_paths(swarm, embodied, title, save_path=None):
+def plot_paths(swarm, embodied, title, run_info=None, save_path=None):
     fig = plt.figure(figsize=(16, 14))
     
     def plot_2d(ax, view, subtitle):
@@ -160,7 +283,10 @@ def plot_paths(swarm, embodied, title, save_path=None):
     ax4.view_init(elev=30, azim=45)
     ax4.legend(fontsize=9)
     
-    fig.suptitle(f'{title}\nSwarm Centroid vs Embodied Drone  ○ Start  □ End', fontsize=14, fontweight='bold')
+    title_text = f'{title}\nSwarm Centroid vs Embodied Drone  ○ Start  □ End'
+    if run_info:
+        title_text += f'\n{run_info}'
+    fig.suptitle(title_text, fontsize=14, fontweight='bold')
     plt.tight_layout()
     
     if save_path:
@@ -174,7 +300,7 @@ def plot_paths(swarm, embodied, title, save_path=None):
 # PLOT 2: CRASHES & DISCONNECTIONS
 # ============================================================
 
-def plot_events(swarm, crashes, disconnections, title, save_path=None):
+def plot_events(swarm, crashes, disconnections, title, run_info=None, save_path=None):
     fig = plt.figure(figsize=(16, 14))
     
     def plot_2d(ax, view, subtitle):
@@ -197,17 +323,16 @@ def plot_events(swarm, crashes, disconnections, title, save_path=None):
             elif view == 'front':
                 ax.scatter(c[0], c[1], c='red', marker='X', s=250, edgecolor='black', lw=2, zorder=10)
         
-        # Disconnections
+        # Disconnected drones at Run end (one marker per drone)
         if disconnections:
             disc = np.array(disconnections)
-            step = max(1, len(disc) // 100)
-            disc = disc[::step]
             if view == 'top':
-                ax.scatter(disc[:, 0], disc[:, 2], c='orange', marker='o', s=60, alpha=0.6, label='Disconnections')
+                ax.scatter(disc[:, 0], disc[:, 2], c='orange', marker='o', s=120, alpha=0.75,
+                           label='Disconnected @ Run end')
             elif view == 'side':
-                ax.scatter(disc[:, 2], disc[:, 1], c='orange', marker='o', s=60, alpha=0.6)
+                ax.scatter(disc[:, 2], disc[:, 1], c='orange', marker='o', s=120, alpha=0.75)
             elif view == 'front':
-                ax.scatter(disc[:, 0], disc[:, 1], c='orange', marker='o', s=60, alpha=0.6)
+                ax.scatter(disc[:, 0], disc[:, 1], c='orange', marker='o', s=120, alpha=0.75)
         
         ax.set_title(subtitle, fontsize=12, fontweight='bold')
         ax.grid(True, alpha=0.3)
@@ -236,17 +361,17 @@ def plot_events(swarm, crashes, disconnections, title, save_path=None):
         ax4.scatter(c[0], c[2], c[1], c='red', marker='X', s=250, edgecolor='black', lw=2, zorder=10)
     if disconnections:
         disc = np.array(disconnections)
-        step = max(1, len(disc) // 100)
-        disc = disc[::step]
-        ax4.scatter(disc[:, 0], disc[:, 2], disc[:, 1], c='orange', marker='o', s=40, alpha=0.5)
+        ax4.scatter(disc[:, 0], disc[:, 2], disc[:, 1], c='orange', marker='o', s=60, alpha=0.6)
     ax4.set_xlabel('X (m)')
     ax4.set_ylabel('Z (m)')
     ax4.set_zlabel('Y (m)')
     ax4.set_title('3D VIEW', fontsize=12, fontweight='bold')
     ax4.view_init(elev=30, azim=45)
     
-    fig.suptitle(f'{title}\n✕ Crashes ({len(crashes)})  ● Disconnections ({len(disconnections)} points)',
-                 fontsize=14, fontweight='bold')
+    title_text = f'{title}\n✕ Crashes ({len(crashes)})  ● Disconnected @ Run end ({len(disconnections)})'
+    if run_info:
+        title_text += f'\n{run_info}'
+    fig.suptitle(title_text, fontsize=14, fontweight='bold')
     plt.tight_layout()
     
     if save_path:
@@ -279,18 +404,30 @@ def main():
     swarm = extract_centroid_trajectory(data)
     embodied = extract_embodied_trajectory(data)
     crashes = extract_crash_positions(data)
-    disconnections = extract_disconnection_points(data)
+    disconnected_positions, disconnected_ids, unknown_disc_ids = disconnected_positions_at_run_end(data)
     
     title = filepath.stem
+    
+    # Get run time info
+    trials = data.get('trials') or []
+    run_trial = next((t for t in trials if t.get('label') == 'Run'), None)
+    run_info = None
+    if run_trial and run_trial.get('startRealtime') is not None and run_trial.get('endRealtime') is not None:
+        real_duration = run_trial['endRealtime'] - run_trial['startRealtime']
+        run_info = f"Run: {run_trial['startRealtime']:.2f}s → {run_trial['endRealtime']:.2f}s (Duration: {real_duration:.2f}s)"
     
     print(f"  Swarm points: {len(swarm)}")
     print(f"  Embodied points: {len(embodied)}")
     print(f"  Crashes: {len(crashes)}")
-    print(f"  Disconnection points: {len(disconnections)}")
+    print(f"  Disconnected drones at Run end: {len(disconnected_ids)}")
+    if disconnected_ids:
+        print(f"    IDs: {sorted(disconnected_ids)}")
+    if unknown_disc_ids:
+        print(f"    (No in-window frames for: {sorted(unknown_disc_ids)})")
     
     # Generate plots
-    plot_paths(swarm, embodied, title, f"{title}_paths.png")
-    plot_events(swarm, crashes, disconnections, title, f"{title}_events.png")
+    plot_paths(swarm, embodied, title, run_info, f"{title}_paths.png")
+    plot_events(swarm, crashes, disconnected_positions, title, run_info, f"{title}_events.png")
     
     plt.show()
 
