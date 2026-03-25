@@ -2546,6 +2546,10 @@ GameObject:
   - component: {fileID: 1134678125}
   - component: {fileID: 1134678124}
   - component: {fileID: 1134678129}
+  - component: {fileID: 1134678133}
+  - component: {fileID: 1134678132}
+  - component: {fileID: 1134678131}
+  - component: {fileID: 1134678130}
   m_Layer: 0
   m_Name: InputManager
   m_TagString: Untagged
@@ -2571,11 +2575,14 @@ MonoBehaviour:
   imuYawInput: {fileID: 0}
   mediaPipeSpreadInput: {fileID: 1134678124}
   mediaPipeHeightInput: {fileID: 1134678125}
+  armIMUInput: {fileID: 1134678131}
+  driftCorrector: {fileID: 1134678130}
   useIMUForMovement: 1
   useMetaQuestForRotation: 0
   useIMUForRotation: 0
   useMediaPipeForSpread: 1
   useMediaPipeForHeight: 1
+  useArmIMUForSpreadHeight: 0
   enableTraditionalFallback: 1
 --- !u!114 &1134678108
 MonoBehaviour:
@@ -2743,6 +2750,93 @@ MonoBehaviour:
   linearMode: {fileID: 0}
   exponentialMode: {fileID: 0}
   rateBasedMode: {fileID: 1134678127}
+--- !u!114 &1134678130
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0da941f8cb05cea4bad66c16c3b18bdf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  armIMUInput: {fileID: 1134678131}
+  useKinematicClamping: 1
+  useZUPT: 0
+  useQuestCorrection: 0
+  useMediaPipeCorrection: 0
+  maxArmPitchUp: 150
+  maxArmPitchDown: 60
+  maxArmYawSpread: 170
+  zuptStillDuration: 0.5
+  zuptVarianceThreshold: 2
+  questLeftHand: {fileID: 0}
+  questRightHand: {fileID: 0}
+  questCorrectionStrength: 0.1
+  mediaPipeSpread: {fileID: 0}
+  mediaPipeHeight: {fileID: 0}
+  mediaPipeCorrectionStrength: 0.05
+--- !u!114 &1134678131
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8b2a05ffa5c3ea348bf2fef459661248, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  chestIMU: {fileID: 1134678108}
+  leftArmIMU: {fileID: 1134678133}
+  rightArmIMU: {fileID: 1134678132}
+  pitchMaxAngle: 60
+  pitchDeadzone: 5
+  pitchResponseCurve: 1.5
+  heightSmoothing: 0.3
+  yawMaxSpreadAngle: 120
+  yawDeadzone: 5
+  spreadResponseCurve: 1.5
+  spreadSmoothing: 0.3
+  minSwarmSeparation: 1
+  maxSwarmSeparation: 10
+  calibrateKey: 99
+  autoCalibrateOnStart: 1
+--- !u!114 &1134678132
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b57f1a1a2929234290b21d8ea7e06c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  OpenZenIoType: 0
+  OpenZenIdentifier: lpmscu2000573
+  calibrateKey: 99
+  autoCalibrateOnStart: 1
+--- !u!114 &1134678133
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b57f1a1a2929234290b21d8ea7e06c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  OpenZenIoType: 0
+  OpenZenIdentifier: lpmscu2000573
+  calibrateKey: 99
+  autoCalibrateOnStart: 1
 --- !u!1 &1179672691
 GameObject:
   m_ObjectHideFlags: 0
