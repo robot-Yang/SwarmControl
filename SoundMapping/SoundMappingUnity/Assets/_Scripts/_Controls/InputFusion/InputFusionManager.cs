@@ -83,7 +83,7 @@ public class InputFusionManager : MonoBehaviour
         get
         {
             if (useArmIMUForSpreadHeight && ArmIMUAvailable())
-                return true; // Arm IMU spread is absolute meters
+                return armIMUInput.IsAbsoluteMode;
             if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
                 return mediaPipeSpreadInput.IsAbsoluteMode;
             return false; // Traditional input is rate-based

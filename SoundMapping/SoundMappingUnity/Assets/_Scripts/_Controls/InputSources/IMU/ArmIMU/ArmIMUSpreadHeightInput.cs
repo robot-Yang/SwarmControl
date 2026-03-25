@@ -4,7 +4,13 @@ using UnityEngine;
 /// Reads two forearm IMUs relative to the chest IMU to derive swarm spread and height.
 /// Height  = average relative pitch of both arms (arms up = swarm rises)
 /// Spread  = yaw angular difference between arms (arms apart = swarm expands)
+///
+/// Spread modes:
+///   Absolute  — arm angle directly maps to target separation in meters (hold arm = hold spread)
+///   RateBased — arm angle maps to rate of change (-1..+1), release to neutral = hold spread
 /// </summary>
+public enum SpreadControlMode { Absolute, RateBased }
+
 public class ArmIMUSpreadHeightInput : MonoBehaviour
 {
     // ============================================
@@ -42,6 +48,9 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     // SPREAD SETTINGS
     // ============================================
     [Header("Spread Mapping")]
+    [Tooltip("Absolute: arm angle maps to target meters. RateBased: arm angle maps to rate of change.")]
+    public SpreadControlMode spreadMode = SpreadControlMode.Absolute;
+
     [Tooltip("Yaw angle difference (degrees) between arms that maps to maximum spread (1.0)")]
     public float yawMaxSpreadAngle = 120f;
 
@@ -103,9 +112,9 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     public bool IsAvailable => chestIMU != null && leftArmIMU != null && rightArmIMU != null;
 
     /// <summary>
-    /// Spread is an absolute target (meters), matching MediaPipe spread mode.
+    /// True when spread outputs absolute meters, false when rate-based (-1..+1).
     /// </summary>
-    public bool IsAbsoluteMode => true;
+    public bool IsAbsoluteMode => spreadMode == SpreadControlMode.Absolute;
 
     // ============================================
     // UPDATE LOOP
@@ -179,7 +188,24 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
         float smoothSpeed = 1f - spreadSmoothing;
         _smoothedSpread = Mathf.Lerp(_smoothedSpread, curved, smoothSpeed * Time.deltaTime * 10f);
 
-        SpreadControl = Mathf.Lerp(minSwarmSeparation, maxSwarmSeparation, _smoothedSpread);
+        if (spreadMode == SpreadControlMode.Absolute)
+        {
+            // Direct mapping: arm angle → target separation in meters
+            SpreadControl = Mathf.Lerp(minSwarmSeparation, maxSwarmSeparation, _smoothedSpread);
+        }
+        else
+        {
+            // Rate-based: arm angle → rate of change (-1..+1)
+            // Arms at neutral (calibrated) = 0 rate = hold current spread
+            // Arms spread wide = +1 = expanding fast
+            // Arms closer than neutral = -1 = contracting
+            float signedDiff = (leftYaw - rightYaw) - _spreadCalibrationOffset;
+            float signedNorm = Mathf.Clamp(signedDiff / yawMaxSpreadAngle, -1f, 1f);
+            float sign = Mathf.Sign(signedNorm);
+            float rateCurved = Mathf.Pow(Mathf.Abs(signedNorm), spreadResponseCurve) * sign;
+            _smoothedSpread = Mathf.Lerp(_smoothedSpread, rateCurved, smoothSpeed * Time.deltaTime * 10f);
+            SpreadControl = _smoothedSpread; // -1..+1 rate
+        }
     }
 
     // ============================================
