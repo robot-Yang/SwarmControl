@@ -2793,8 +2793,8 @@ MonoBehaviour:
   questMaxHeightBelow: 0.5
   questMinHandDistance: 0.1
   questMaxHandDistance: 0.8
-  mediaPipeSpread: {fileID: 0}
-  mediaPipeHeight: {fileID: 0}
+  mediaPipeSpread: {fileID: 1134678124}
+  mediaPipeHeight: {fileID: 1134678125}
   mediaPipeCorrectionStrength: 0.05
 --- !u!114 &1134678131
 MonoBehaviour:
