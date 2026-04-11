@@ -29,9 +29,11 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("MediaPipe height input from Python webcam tracking")]
     public MediaPipeHeightInput mediaPipeHeightInput;
 
-    // Future inputs will go here:
-    // public HandIMUInput leftHandIMU;
-    // public HandIMUInput rightHandIMU;
+    [Tooltip("Arm IMU input — forearm sensors for spread and height (primary wearable source)")]
+    public ArmIMUSpreadHeightInput armIMUInput;
+
+    [Tooltip("Optional drift corrector sitting in front of armIMUInput — leave empty to use raw IMU")]
+    public DriftCorrector driftCorrector;
 
     // ============================================
     // INPUT PRIORITY TOGGLES
@@ -51,6 +53,9 @@ public class InputFusionManager : MonoBehaviour
 
     [Tooltip("Use MediaPipe webcam tracking for height control (if false, uses traditional input)")]
     public bool useMediaPipeForHeight = false;
+
+    [Tooltip("Use forearm IMUs for spread and height (takes priority over MediaPipe when enabled)")]
+    public bool useArmIMUForSpreadHeight = false;
 
     [Tooltip("Always allow traditional input as fallback when primary sources aren't moving")]
     public bool enableTraditionalFallback = true;
@@ -77,11 +82,10 @@ public class InputFusionManager : MonoBehaviour
     {
         get
         {
-            // MediaPipe provides absolute target values
+            if (useArmIMUForSpreadHeight && ArmIMUAvailable())
+                return armIMUInput.IsAbsoluteMode;
             if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
-            {
                 return mediaPipeSpreadInput.IsAbsoluteMode;
-            }
             return false; // Traditional input is rate-based
         }
     }
@@ -136,6 +140,12 @@ public class InputFusionManager : MonoBehaviour
         {
             Debug.LogWarning("InputFusionManager: MediaPipeHeightInput is enabled but reference is missing. Falling back to traditional input.");
             useMediaPipeForHeight = false;
+        }
+
+        if (armIMUInput == null && useArmIMUForSpreadHeight)
+        {
+            Debug.LogWarning("InputFusionManager: ArmIMUSpreadHeightInput is enabled but reference is missing. Falling back to MediaPipe/traditional.");
+            useArmIMUForSpreadHeight = false;
         }
     }
 
@@ -200,18 +210,24 @@ public class InputFusionManager : MonoBehaviour
     {
         float height = 0f;
 
-        // PRIMARY: MediaPipe webcam tracking (if enabled and available)
-        if (useMediaPipeForHeight && mediaPipeHeightInput != null && mediaPipeHeightInput.IsAvailable)
+        // PRIMARY: Arm IMU forearm sensors (if enabled and available)
+        if (useArmIMUForSpreadHeight && ArmIMUAvailable())
+        {
+            height = driftCorrector != null && driftCorrector.IsAvailable
+                ? driftCorrector.CorrectedHeight
+                : armIMUInput.HeightControl;
+        }
+        // SECONDARY: MediaPipe webcam tracking
+        else if (useMediaPipeForHeight && mediaPipeHeightInput != null && mediaPipeHeightInput.IsAvailable)
         {
             height = mediaPipeHeightInput.HeightControl;
         }
-        // FALLBACK: Use traditional input height
+        // FALLBACK: traditional input
         else if (traditionalInput != null)
         {
             height = traditionalInput.HeightInput;
         }
 
-        // Update the Y component of SwarmMovement
         SwarmMovement = new Vector3(SwarmMovement.x, height, SwarmMovement.z);
     }
 
@@ -232,12 +248,19 @@ public class InputFusionManager : MonoBehaviour
             return;
         }
 
-        // PRIMARY: MediaPipe webcam tracking (if enabled and available)
-        if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
+        // PRIMARY: Arm IMU forearm sensors (if enabled and available)
+        if (useArmIMUForSpreadHeight && ArmIMUAvailable())
+        {
+            spread = driftCorrector != null && driftCorrector.IsAvailable
+                ? driftCorrector.CorrectedSpread
+                : armIMUInput.SpreadControl;
+        }
+        // SECONDARY: MediaPipe webcam tracking
+        else if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
         {
             spread = mediaPipeSpreadInput.SpreadControl;
         }
-        // FALLBACK: Use traditional input (triggers/bumpers - always rate-based)
+        // FALLBACK: traditional input (rate-based)
         else if (traditionalInput != null)
         {
             spread = traditionalInput.SpreadInput;
@@ -309,6 +332,8 @@ public class InputFusionManager : MonoBehaviour
     // HELPER METHODS
     // ============================================
 
+    bool ArmIMUAvailable() => armIMUInput != null && armIMUInput.IsAvailable;
+
     /// <summary>
     /// Returns true if any movement input is active (from any source)
     /// </summary>
@@ -361,6 +386,13 @@ public class InputFusionManager : MonoBehaviour
             Debug.Log("✓ IMU yaw calibrated");
         }
 
+        // Calibrate arm IMU spread/height
+        if (armIMUInput != null && armIMUInput.IsAvailable)
+        {
+            armIMUInput.CalibrateNeutral();
+            Debug.Log("✓ Arm IMU spread/height calibrated");
+        }
+
         Debug.Log("=== CALIBRATION COMPLETE ===");
         Debug.Log("Sensors calibrated. Input sources remain in their current state (not auto-activated).");
     }
@@ -383,8 +415,9 @@ public class InputFusionManager : MonoBehaviour
         }
         
         GUILayout.Label($"Movement: {SwarmMovement}");
-        GUILayout.Label($"Spread: {SwarmSpread:F2}");
+        GUILayout.Label($"Spread: {SwarmSpread:F2}  Height: {SwarmMovement.y:F2}");
         GUILayout.Label($"Camera Rotation OUTPUT: {CameraRotation:F2}");
+        GUILayout.Label($"ArmIMU: {(useArmIMUForSpreadHeight ? (ArmIMUAvailable() ? "<color=lime>ON</color>" : "<color=red>MISSING</color>") : "off")}");
        // GUILayout.Label($"---");
        // GUILayout.Label($"IMU Movement Active: {useIMUForMovement}");
        // GUILayout.Label($"<color=cyan>MetaQuest Rotation Active: {useMetaQuestForRotation}</color>");
