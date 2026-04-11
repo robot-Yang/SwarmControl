@@ -5,6 +5,10 @@ using UnityEngine;
 /// Height  = average relative pitch of both arms (arms up = swarm rises)
 /// Spread  = yaw angular difference between arms (arms apart = swarm expands)
 ///
+/// The chest IMU is used as the reference frame via quaternion math, NOT Euler subtraction.
+/// This means tilting the chest forward/backward has zero effect on height or spread readings,
+/// even for large angles or combined rotations.
+///
 /// Spread modes:
 ///   Absolute  — arm angle directly maps to target separation in meters (hold arm = hold spread)
 ///   RateBased — arm angle maps to rate of change (-1..+1), release to neutral = hold spread
@@ -82,9 +86,12 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     [Tooltip("Automatically calibrate neutral on start (after a few frames)")]
     public bool autoCalibrateOnStart = true;
 
-    private float _heightCalibrationOffset = 0f;
-    private float _spreadCalibrationOffset = 0f;
-    private bool _initialized = false;
+    // Neutral relative rotations captured at calibration time.
+    // Each stores: Inverse(chest) * arm, so the reference pose is "arm relative to chest when calibrated".
+    private Quaternion _leftNeutralRel  = Quaternion.identity;
+    private Quaternion _rightNeutralRel = Quaternion.identity;
+    private bool _calibrated   = false;
+    private bool _initialized  = false;
 
     // ============================================
     // SMOOTHING STATE
@@ -140,15 +147,25 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
             return;
         }
 
-        Vector3 chest = chestIMU.SensorEulerAnglesDirect;
-        Vector3 left  = leftArmIMU.SensorEulerAnglesDirect;
-        Vector3 right = rightArmIMU.SensorEulerAnglesDirect;
+        // Current relative orientation of each arm in the chest's frame.
+        // Quaternion math removes ALL chest motion (pitch/yaw/roll) correctly,
+        // unlike Euler subtraction which bleeds axes into each other.
+        Quaternion chestRot = chestIMU.SensorOrientation;
+        Quaternion leftRelNow  = Quaternion.Inverse(chestRot) * leftArmIMU.SensorOrientation;
+        Quaternion rightRelNow = Quaternion.Inverse(chestRot) * rightArmIMU.SensorOrientation;
 
-        // Relative angles (arm angle minus chest angle removes body movement)
-        float leftRelPitch  = NormalizeAngle(left.x  - chest.x);
-        float rightRelPitch = NormalizeAngle(right.x - chest.x);
-        float leftRelYaw    = NormalizeAngle(left.y  - chest.y);
-        float rightRelYaw   = NormalizeAngle(right.y - chest.y);
+        // Delta from the neutral pose captured at calibration.
+        // At calibration: deltaLeft = Identity → zero pitch, zero yaw.
+        Quaternion leftDelta  = Quaternion.Inverse(_leftNeutralRel)  * leftRelNow;
+        Quaternion rightDelta = Quaternion.Inverse(_rightNeutralRel) * rightRelNow;
+
+        Vector3 leftEuler  = leftDelta.eulerAngles;
+        Vector3 rightEuler = rightDelta.eulerAngles;
+
+        float leftRelPitch  = NormalizeAngle(leftEuler.x);
+        float rightRelPitch = NormalizeAngle(rightEuler.x);
+        float leftRelYaw    = NormalizeAngle(leftEuler.y);
+        float rightRelYaw   = NormalizeAngle(rightEuler.y);
 
         ComputeHeight(leftRelPitch, rightRelPitch);
         ComputeSpread(leftRelYaw, rightRelYaw);
@@ -160,7 +177,7 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
 
     void ComputeHeight(float leftPitch, float rightPitch)
     {
-        float avgPitch = (leftPitch + rightPitch) * 0.5f - _heightCalibrationOffset;
+        float avgPitch = (leftPitch + rightPitch) * 0.5f;
 
         if (Mathf.Abs(avgPitch) < pitchDeadzone)
             avgPitch = 0f;
@@ -176,35 +193,36 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
 
     void ComputeSpread(float leftYaw, float rightYaw)
     {
-        float yawDiff = Mathf.Abs(leftYaw - rightYaw) - _spreadCalibrationOffset;
-        yawDiff = Mathf.Max(0f, yawDiff);
-
-        if (yawDiff < yawDeadzone)
-            yawDiff = 0f;
-
-        float normalized = Mathf.Clamp01(yawDiff / yawMaxSpreadAngle);
-        float curved = Mathf.Pow(normalized, spreadResponseCurve);
-
         float smoothSpeed = 1f - spreadSmoothing;
-        _smoothedSpread = Mathf.Lerp(_smoothedSpread, curved, smoothSpeed * Time.deltaTime * 10f);
 
         if (spreadMode == SpreadControlMode.Absolute)
         {
-            // Direct mapping: arm angle → target separation in meters
+            // |yaw difference| maps to target separation.
+            // Both arms spread outward → yaws diverge (one goes +, other −).
+            float yawDiff = Mathf.Abs(leftYaw - rightYaw);
+            if (yawDiff < yawDeadzone) yawDiff = 0f;
+
+            float normalized = Mathf.Clamp01(yawDiff / yawMaxSpreadAngle);
+            float curved = Mathf.Pow(normalized, spreadResponseCurve);
+
+            _smoothedSpread = Mathf.Lerp(_smoothedSpread, curved, smoothSpeed * Time.deltaTime * 10f);
             SpreadControl = Mathf.Lerp(minSwarmSeparation, maxSwarmSeparation, _smoothedSpread);
         }
         else
         {
-            // Rate-based: arm angle → rate of change (-1..+1)
-            // Arms at neutral (calibrated) = 0 rate = hold current spread
-            // Arms spread wide = +1 = expanding fast
-            // Arms closer than neutral = -1 = contracting
-            float signedDiff = (leftYaw - rightYaw) - _spreadCalibrationOffset;
+            // Rate-based: signed yaw difference → rate of change (-1..+1).
+            // Arms at neutral = 0 rate = hold current spread.
+            // Arms spread wider than neutral = positive rate = expanding.
+            // Arms closer than neutral = negative rate = contracting.
+            float signedDiff = leftYaw - rightYaw;
+            if (Mathf.Abs(signedDiff) < yawDeadzone) signedDiff = 0f;
+
             float signedNorm = Mathf.Clamp(signedDiff / yawMaxSpreadAngle, -1f, 1f);
             float sign = Mathf.Sign(signedNorm);
             float rateCurved = Mathf.Pow(Mathf.Abs(signedNorm), spreadResponseCurve) * sign;
+
             _smoothedSpread = Mathf.Lerp(_smoothedSpread, rateCurved, smoothSpeed * Time.deltaTime * 10f);
-            SpreadControl = _smoothedSpread; // -1..+1 rate
+            SpreadControl = _smoothedSpread;
         }
     }
 
@@ -213,7 +231,9 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     // ============================================
 
     /// <summary>
-    /// Stores the current arm pose as neutral (zeroes height and spread offsets).
+    /// Captures the current arm pose as neutral.
+    /// After calibration, any chest motion is fully cancelled — only arm motion
+    /// relative to the chest at this moment will produce height/spread output.
     /// </summary>
     public void CalibrateNeutral()
     {
@@ -223,19 +243,12 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
             return;
         }
 
-        Vector3 chest = chestIMU.SensorEulerAnglesDirect;
-        Vector3 left  = leftArmIMU.SensorEulerAnglesDirect;
-        Vector3 right = rightArmIMU.SensorEulerAnglesDirect;
+        Quaternion chestRot = chestIMU.SensorOrientation;
+        _leftNeutralRel  = Quaternion.Inverse(chestRot) * leftArmIMU.SensorOrientation;
+        _rightNeutralRel = Quaternion.Inverse(chestRot) * rightArmIMU.SensorOrientation;
+        _calibrated = true;
 
-        float leftRelPitch  = NormalizeAngle(left.x  - chest.x);
-        float rightRelPitch = NormalizeAngle(right.x - chest.x);
-        float leftRelYaw    = NormalizeAngle(left.y  - chest.y);
-        float rightRelYaw   = NormalizeAngle(right.y - chest.y);
-
-        _heightCalibrationOffset = (leftRelPitch + rightRelPitch) * 0.5f;
-        _spreadCalibrationOffset = Mathf.Abs(leftRelYaw - rightRelYaw);
-
-        Debug.Log($"ArmIMU Calibrated. Height offset: {_heightCalibrationOffset:F2}°, Spread offset: {_spreadCalibrationOffset:F2}°");
+        Debug.Log("ArmIMU Calibrated (quaternion reference stored).");
     }
 
     // ============================================
@@ -263,20 +276,20 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
 
         if (IsAvailable)
         {
-            Vector3 chest = chestIMU.SensorEulerAnglesDirect;
-            Vector3 left  = leftArmIMU.SensorEulerAnglesDirect;
-            Vector3 right = rightArmIMU.SensorEulerAnglesDirect;
+            Quaternion chestRot = chestIMU.SensorOrientation;
+            Quaternion leftDelta  = Quaternion.Inverse(_leftNeutralRel)  * (Quaternion.Inverse(chestRot) * leftArmIMU.SensorOrientation);
+            Quaternion rightDelta = Quaternion.Inverse(_rightNeutralRel) * (Quaternion.Inverse(chestRot) * rightArmIMU.SensorOrientation);
 
-            float leftRelPitch = NormalizeAngle(left.x  - chest.x) - _heightCalibrationOffset;
-            float rightRelPitch= NormalizeAngle(right.x - chest.x) - _heightCalibrationOffset;
-            float leftRelYaw   = NormalizeAngle(left.y  - chest.y);
-            float rightRelYaw  = NormalizeAngle(right.y - chest.y);
-            float yawDiff      = Mathf.Abs(leftRelYaw - rightRelYaw) - _spreadCalibrationOffset;
+            float lp = NormalizeAngle(leftDelta.eulerAngles.x);
+            float rp = NormalizeAngle(rightDelta.eulerAngles.x);
+            float ly = NormalizeAngle(leftDelta.eulerAngles.y);
+            float ry = NormalizeAngle(rightDelta.eulerAngles.y);
 
-            GUILayout.Label($"Rel Pitch  L:{leftRelPitch:F1}°  R:{rightRelPitch:F1}°");
-            GUILayout.Label($"Rel Yaw Diff: {yawDiff:F1}°");
+            GUILayout.Label($"Calibrated: {_calibrated}");
+            GUILayout.Label($"Rel Pitch  L:{lp:F1}°  R:{rp:F1}°");
+            GUILayout.Label($"Rel Yaw    L:{ly:F1}°  R:{ry:F1}°  Diff:{Mathf.Abs(ly - ry):F1}°");
             GUILayout.Label($"Height Output: {HeightControl:F3}");
-            GUILayout.Label($"Spread Output: {SpreadControl:F2}m");
+            GUILayout.Label($"Spread Output: {SpreadControl:F2}" + (spreadMode == SpreadControlMode.Absolute ? "m" : " rate"));
         }
 
         GUILayout.EndArea();
