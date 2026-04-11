@@ -35,8 +35,8 @@ public class TraditionalInput : MonoBehaviour
     [Tooltip("Right stick horizontal for camera rotation")]
     public string rotationAxis = "JoystickRightHorizontal";
     
-    [Tooltip("Right stick vertical for height control")]
-    public string heightAxis = "JoystickRightVertical";
+    [Tooltip("Left stick vertical (throttle) for height control")]
+    public string heightAxis = "Throttle";
     
     [Tooltip("LR axis for spread control (triggers/bumpers)")]
     public string spreadAxis = "";

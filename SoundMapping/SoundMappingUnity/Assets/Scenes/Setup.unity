@@ -2561,6 +2561,7 @@ GameObject:
   - component: {fileID: 1134678132}
   - component: {fileID: 1134678131}
   - component: {fileID: 1134678130}
+  - component: {fileID: 1134678134}
   m_Layer: 0
   m_Name: InputManager
   m_TagString: Untagged
@@ -2588,12 +2589,12 @@ MonoBehaviour:
   mediaPipeHeightInput: {fileID: 1134678125}
   armIMUInput: {fileID: 1134678131}
   driftCorrector: {fileID: 1134678130}
-  useIMUForMovement: 1
+  useIMUForMovement: 0
   useMetaQuestForRotation: 0
   useIMUForRotation: 0
   useMediaPipeForSpread: 0
   useMediaPipeForHeight: 0
-  useArmIMUForSpreadHeight: 1
+  useArmIMUForSpreadHeight: 0
   enableTraditionalFallback: 1
 --- !u!114 &1134678108
 MonoBehaviour:
@@ -2815,6 +2816,7 @@ MonoBehaviour:
   pitchDeadzone: 5
   pitchResponseCurve: 1.5
   heightSmoothing: 0.3
+  spreadMode: 0
   yawMaxSpreadAngle: 120
   yawDeadzone: 5
   spreadResponseCurve: 1.5
@@ -2855,6 +2857,18 @@ MonoBehaviour:
   OpenZenIdentifier: 00:04:3E:5A:2B:70
   calibrateKey: 99
   autoCalibrateOnStart: 1
+--- !u!114 &1134678134
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3266be46568a873469797533f28797fa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1179672691
 GameObject:
   m_ObjectHideFlags: 0
