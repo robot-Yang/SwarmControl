@@ -119,12 +119,12 @@ InputManager:
     joyNum: 0
   - serializedVersion: 3
     m_Name: LR
-    descriptiveName:
-    descriptiveNegativeName:
-    negativeButton:
-    positiveButton:
-    altNegativeButton:
-    altPositiveButton:
+    descriptiveName: 
+    descriptiveNegativeName: 
+    negativeButton: 
+    positiveButton: 
+    altNegativeButton: 
+    altPositiveButton: 
     gravity: 0
     dead: 0.001
     sensitivity: 1
@@ -179,16 +179,16 @@ InputManager:
     snap: 0
     invert: 0
     type: 2
-    axis: 25
+    axis: 0
     joyNum: 0
   - serializedVersion: 3
     m_Name: TestAxis5
-    descriptiveName:
-    descriptiveNegativeName:
-    negativeButton:
-    positiveButton:
-    altNegativeButton:
-    altPositiveButton:
+    descriptiveName: 
+    descriptiveNegativeName: 
+    negativeButton: 
+    positiveButton: 
+    altNegativeButton: 
+    altPositiveButton: 
     gravity: 0
     dead: 0.05
     sensitivity: 1
@@ -199,12 +199,12 @@ InputManager:
     joyNum: 0
   - serializedVersion: 3
     m_Name: TestAxis6
-    descriptiveName:
-    descriptiveNegativeName:
-    negativeButton:
-    positiveButton:
-    altNegativeButton:
-    altPositiveButton:
+    descriptiveName: 
+    descriptiveNegativeName: 
+    negativeButton: 
+    positiveButton: 
+    altNegativeButton: 
+    altPositiveButton: 
     gravity: 0
     dead: 0.05
     sensitivity: 1
@@ -215,12 +215,12 @@ InputManager:
     joyNum: 0
   - serializedVersion: 3
     m_Name: TestAxis7
-    descriptiveName:
-    descriptiveNegativeName:
-    negativeButton:
-    positiveButton:
-    altNegativeButton:
-    altPositiveButton:
+    descriptiveName: 
+    descriptiveNegativeName: 
+    negativeButton: 
+    positiveButton: 
+    altNegativeButton: 
+    altPositiveButton: 
     gravity: 0
     dead: 0.05
     sensitivity: 1
@@ -231,12 +231,12 @@ InputManager:
     joyNum: 0
   - serializedVersion: 3
     m_Name: TestAxis8
-    descriptiveName:
-    descriptiveNegativeName:
-    negativeButton:
-    positiveButton:
-    altNegativeButton:
-    altPositiveButton:
+    descriptiveName: 
+    descriptiveNegativeName: 
+    negativeButton: 
+    positiveButton: 
+    altNegativeButton: 
+    altPositiveButton: 
     gravity: 0
     dead: 0.05
     sensitivity: 1
