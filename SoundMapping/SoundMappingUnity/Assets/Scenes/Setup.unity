@@ -2627,7 +2627,7 @@ MonoBehaviour:
   horizontalAxis: Horizontal
   verticalAxis: Vertical
   rotationAxis: JoystickRightHorizontal
-  heightAxis: JoystickRightVertical
+  heightAxis: Throttle
   spreadAxis: LR
   heightUpKey: 101
   heightDownKey: 113
@@ -2866,7 +2866,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 1134678106}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3266be46568a873469797533f28797fa, type: 3}
+  m_Script: {fileID: 11500000, guid: 29477ca303ba28148a1db9999fcad279, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
 --- !u!1 &1179672691
