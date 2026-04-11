@@ -15,7 +15,8 @@ public class TraditionalInput : MonoBehaviour
     public Vector2 MovementInput { get; private set; }      // Horizontal/Vertical axes combined
     public float HeightInput { get; private set; }          // Up/Down control
     public float RotationInput { get; private set; }        // Camera rotation
-    public float SpreadInput { get; private set; }          // Swarm spread control
+    public float SpreadInput { get; private set; }          // Swarm spread control (rate OR absolute depending on spreadAbsoluteMode)
+    public bool IsSpreadAbsolute => spreadAbsoluteMode;
 
     // Button States (One-Frame Events)
     public bool SelectionNextPressed { get; private set; }      // Button 5
@@ -38,8 +39,17 @@ public class TraditionalInput : MonoBehaviour
     [Tooltip("Left stick vertical (throttle) for height control")]
     public string heightAxis = "Throttle";
     
-    [Tooltip("LR axis for spread control (triggers/bumpers)")]
+    [Tooltip("LR axis for spread control (knob/triggers)")]
     public string spreadAxis = "";
+
+    [Tooltip("If true, knob/axis value maps directly to spread distance (absolute). If false, value is a rate.")]
+    public bool spreadAbsoluteMode = true;
+
+    [Tooltip("Min spread distance when knob is at -1 (only used in absolute mode)")]
+    public float spreadMin = 1f;
+
+    [Tooltip("Max spread distance when knob is at +1 (only used in absolute mode)")]
+    public float spreadMax = 5f;
 
     [Header("Keyboard Keys")]
     [Tooltip("Keyboard key for upward height control")]
@@ -94,8 +104,18 @@ public class TraditionalInput : MonoBehaviour
         // Rotation (right stick horizontal)
         RotationInput = Input.GetAxis(rotationAxis);
 
-        // Spread (triggers/bumpers)
-        SpreadInput = Input.GetAxis(spreadAxis);
+        // Spread (knob/triggers)
+        float rawSpread = string.IsNullOrEmpty(spreadAxis) ? 0f : Input.GetAxis(spreadAxis);
+        if (spreadAbsoluteMode)
+        {
+            // Map knob -1..+1 → spreadMin..spreadMax
+            float t = (rawSpread + 1f) * 0.5f; // remap to 0..1
+            SpreadInput = Mathf.Lerp(spreadMin, spreadMax, t);
+        }
+        else
+        {
+            SpreadInput = rawSpread;
+        }
     }
 
     void UpdateButtons()

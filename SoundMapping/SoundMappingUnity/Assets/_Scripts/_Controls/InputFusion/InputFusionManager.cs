@@ -86,7 +86,7 @@ public class InputFusionManager : MonoBehaviour
                 return armIMUInput.IsAbsoluteMode;
             if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
                 return mediaPipeSpreadInput.IsAbsoluteMode;
-            return false; // Traditional input is rate-based
+            return traditionalInput != null && traditionalInput.IsSpreadAbsolute;
         }
     }
 

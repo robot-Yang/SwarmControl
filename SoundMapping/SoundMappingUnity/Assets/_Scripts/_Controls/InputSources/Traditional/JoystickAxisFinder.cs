@@ -11,14 +11,15 @@ public class JoystickAxisFinder : MonoBehaviour
     readonly string[] axisNames = {
         "Horizontal", "Vertical",
         "JoystickRightHorizontal", "JoystickRightVertical",
-        "LR", "Throttle"
+        "LR", "Throttle",
+        "TestAxis5", "TestAxis6", "TestAxis7", "TestAxis8"
     };
 
     void OnGUI()
     {
         if (!Application.isPlaying) return;
 
-        GUILayout.BeginArea(new Rect(Screen.width - 240, 10, 230, 220));
+        GUILayout.BeginArea(new Rect(Screen.width - 240, 10, 230, 310));
         GUILayout.Label("<b>AXIS FINDER — move each stick</b>");
         GUILayout.Label("────────────────────");
         foreach (string name in axisNames)
