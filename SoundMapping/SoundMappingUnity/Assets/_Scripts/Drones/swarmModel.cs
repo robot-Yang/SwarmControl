@@ -837,6 +837,7 @@ public class swarmModel : MonoBehaviour
 
     void getSwarmConnexion()
     {
+        if (network == null) return;
         List<DroneFake> connectedDrone = network.drones.ToList();
         bool hasNonMovable = drones.Exists(d => !d.isMovable);
         if (hasNonMovable)
