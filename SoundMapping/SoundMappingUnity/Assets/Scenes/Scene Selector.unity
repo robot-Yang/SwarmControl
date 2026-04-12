@@ -377,6 +377,7 @@ MonoBehaviour:
   m_DeselectOnBackgroundClick: 1
   m_PointerBehavior: 0
   m_CursorLockBehavior: 0
+  m_ScrollDeltaPerTick: 6
 --- !u!1 &179030187
 GameObject:
   m_ObjectHideFlags: 0
@@ -1988,7 +1989,7 @@ MonoBehaviour:
   isLoading: 0
   scenes: []
   ObstacleFPV: FPVObs
-  ObstacleFPV1: FPVObs_2
+  ObstacleFPV1: FPVObs_1
   ObstacleTPV: TDVObs
   ObstacleTPV1: TDVObs_1
   CollectibleFPV: FPVCollectibles
