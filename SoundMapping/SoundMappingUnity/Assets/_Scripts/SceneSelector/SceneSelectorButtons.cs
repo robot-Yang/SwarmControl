@@ -42,24 +42,6 @@ public class SceneSelectorScriptEditor : Editor
         }
         EditorGUILayout.LabelField("Main First : " + SceneSelectorScript._order, style);
 
-        // Find all scenes in "Assets/Scenes/Training"
-        string[] sceneGuids = AssetDatabase.FindAssets("t:Scene", new[] { myScript.assetPathTraining });
-        
-        // Create a button for each scene found
-        foreach (string guid in sceneGuids)
-        {
-            // Convert GUID to path, then extract the filename without extension
-            string scenePath = AssetDatabase.GUIDToAssetPath(guid);
-            string sceneName = Path.GetFileNameWithoutExtension(scenePath);
-
-            if (GUILayout.Button(sceneName))
-            {
-                // Tell our script to load this scene (unload the previous one if any)
-                myScript.SelectTrainingFromButton(sceneName);
-            }
-        }
-
-
         EditorGUILayout.BeginVertical();
 
         EditorGUILayout.BeginHorizontal();
