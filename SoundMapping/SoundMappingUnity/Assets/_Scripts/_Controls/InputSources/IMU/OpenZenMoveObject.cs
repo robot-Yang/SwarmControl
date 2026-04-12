@@ -59,7 +59,7 @@ public class OpenZenMoveObject : MonoBehaviour
             mSensorHandle);
         if (sensorInitError != ZenSensorInitError.ZenSensorInitError_None)
         {
-            print("Error while connecting to sensor.");
+            Debug.LogError($"[OpenZen] Failed to connect to {OpenZenIdentifier} ({OpenZenIoType}): {sensorInitError}");
         } else {
             ZenComponentHandle_t mComponent = new ZenComponentHandle_t();
             OpenZen.ZenSensorComponentsByNumber(mZenHandle, mSensorHandle, OpenZen.g_zenSensorType_Imu, 0, mComponent);
