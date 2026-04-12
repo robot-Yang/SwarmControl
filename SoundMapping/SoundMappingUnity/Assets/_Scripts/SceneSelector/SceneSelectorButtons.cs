@@ -1,6 +1,5 @@
 using UnityEngine;
 using UnityEditor;
-using System.IO;
 
 [CustomEditor(typeof(SceneSelectorScript))]
 public class SceneSelectorScriptEditor : Editor

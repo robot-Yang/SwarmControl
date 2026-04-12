@@ -18,9 +18,6 @@ public class SceneSelectorScript : MonoBehaviour
     [HideInInspector] public string ObstacleFPV  = "Pablo";
     [HideInInspector] public string ObstacleFPV2 = "Main";
 
-    [HideInInspector] public string assetPathTraining = "Assets/Scenes/TrainingFinal";
-
-
     public static string pid = "default";
     public static bool _order = false;
     public static bool _haptics = true;
@@ -40,17 +37,6 @@ public class SceneSelectorScript : MonoBehaviour
         // For initial cleanup.
         StartCoroutine(UnloadAllScenesExcept("Scene Selector"));
 
-        // If using the UnityEditor to populate scenes:
-        #if UNITY_EDITOR
-        string[] sceneGuids = UnityEditor.AssetDatabase.FindAssets("t:Scene", new[] { assetPathTraining });
-        foreach (string guid in sceneGuids)
-        {
-            string scenePath = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
-            string sceneName = System.IO.Path.GetFileNameWithoutExtension(scenePath);
-            scenes.Add(sceneName);
-        }
-        #endif
-        
         // ✅ Use the experiment flow so all flags are set and swarm spawns
         if (autoLoadOnStart && !string.IsNullOrEmpty(autoLoadSceneName))
         {
