@@ -2,6 +2,27 @@
 
 SwarmControl is a VR research project comparing two methods of controlling a drone swarm. The study investigates how the input modality affects **task performance** and the **sense of embodiment** experienced by the operator.
 
+
+---
+
+## Motivation
+
+Traditional drone swarm control relies on RC controllers, which require learning an abstract mapping between physical inputs and swarm behaviour. There is no natural correspondence between what the operator does and how the swarm moves — control is distal and cognitively mediated.
+
+Body-based interfaces exploit **motor congruence**: leaning forward moves the swarm forward, spreading the arms spreads the swarm. This direct mapping reduces the cognitive gap between intention and action, and should strengthen the sense of being part of the swarm rather than operating it from the outside. Adding haptic feedback closes the sensorimotor loop further, giving the operator a physical awareness of swarm state (collisions, disconnections, forces).
+
+---
+
+## Research Questions & Hypotheses
+
+**RQ1** — Does body-based control improve the sense of embodiment compared to traditional RC control?
+> **H1:** The Upper Body condition will yield higher embodiment scores, driven by motor congruence between operator movement and swarm movement.
+
+**RQ2** — Does body-based control affect task performance?
+> **H2:** The Upper Body condition will achieve comparable or better performance (time, crashes, connectivity) for non-expert users. Expert users may favour the controller due to prior learned mappings.
+
+**RQ3** — Does haptic feedback enhance embodiment and performance independently of control modality?
+> **H3:** Haptic feedback will increase embodiment scores regardless of condition, by reinforcing the physical presence of the swarm.
 ---
 
 ## Conditions
@@ -30,7 +51,7 @@ The path is a linear obstacle course (~400 m) that systematically tests all cont
 3. **Height** — vertical clearance obstacles
 ![IMU](images/up.png)
 4. **Combined** — multi-axis obstacles requiring simultaneous control of movement, spread, and height
-![IMU](images/imu.png)
+![IMU](images/left.png)
 
 ---
 
@@ -89,38 +110,10 @@ SwarmControl/
 ├── Control/                          # Python hand-tracking server (MediaPipe, WebSocket → Unity)
 └── WebPages/unity-plotter/           # Haptic bridge (Unity → Python → USB → ESP32 → actuators)
 ```
-
-**Data flow**
-
-```
-IMU sensors (OpenZen) ──────────────────┐
-Meta Quest headset ─────────────────────┤
-Taranis RC controller ──────────────────┼──▶ InputFusionManager (Unity) ──▶ SwarmModel ──▶ JSON logs
-Webcam + MediaPipe ──▶ WebSocket :9052 ─┘                                              ──▶ Trajectories
-
-Unity ──▶ Python ──▶ USB ──▶ Gateway ESP32 ──▶ ESP-NOW ──▶ Haptic nodes
-```
-
-Two parallel data streams are recorded per session:
-
-| Stream | Rate | Contents |
-|--------|------|----------|
-| Swarm state | 10 Hz | Per-drone position, velocity, forces, network topology, connectivity, isolation, haptic events |
-| Trajectories | 15 Hz | Per-drone position + velocity, connectivity flag, embodied flag, trial timestamps |
-
----
-
-## Study Design
-
-Sessions are counterbalanced across haptics (on/off) and scene order, encoded in the participant ID:
-
-```
-Format: [H/N][T/F][participant_id]
-Example: HTP01  →  haptics on, Main scene first, participant P01
-```
-
 ---
 
 ## Next Steps
 
 Integrate full upper-body haptic feedback via a wearable haptic jacket, combining IMU-based swarm control with distributed haptic actuation across the torso — enabling closed-loop sensorimotor control of the swarm.
+
+![IMU](images/back.png)
