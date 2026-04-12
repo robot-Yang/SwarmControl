@@ -114,9 +114,10 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     public float SpreadControl { get; private set; }
 
     /// <summary>
-    /// Returns true when all three IMU references are assigned.
+    /// Returns true when all three IMUs are assigned AND have received at least one data packet.
     /// </summary>
-    public bool IsAvailable => chestIMU != null && leftArmIMU != null && rightArmIMU != null;
+    public bool IsAvailable => chestIMU != null && leftArmIMU != null && rightArmIMU != null
+        && chestIMU.IsConnected && leftArmIMU.IsConnected && rightArmIMU.IsConnected;
 
     /// <summary>
     /// True when spread outputs absolute meters, false when rate-based (-1..+1).
@@ -129,7 +130,10 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
 
     void Update()
     {
-        if (!_initialized && autoCalibrateOnStart && Time.frameCount > 5)
+        // Auto-calibrate only once all three sensors have received real data.
+        // Checking IsAvailable (which requires IsConnected) prevents calibrating
+        // against Quaternion.identity when sensors haven't connected yet.
+        if (!_initialized && autoCalibrateOnStart && IsAvailable)
         {
             CalibrateNeutral();
             _initialized = true;
@@ -295,7 +299,10 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
 
         GUILayout.BeginArea(new Rect(10, 580, 340, 160));
         GUILayout.Label("<b>Arm IMU Spread/Height</b>");
-        GUILayout.Label($"Available: {IsAvailable}");
+        bool chestOk = chestIMU != null && chestIMU.IsConnected;
+        bool leftOk  = leftArmIMU != null && leftArmIMU.IsConnected;
+        bool rightOk = rightArmIMU != null && rightArmIMU.IsConnected;
+        GUILayout.Label($"Sensors: Chest={chestOk} L={leftOk} R={rightOk}  Calibrated={_calibrated}");
 
         if (IsAvailable)
         {

@@ -26,6 +26,9 @@ public class OpenZenMoveObject : MonoBehaviour
     public Vector3 SensorEulerAnglesDirect { get; private set; } // Calibrated angles (after offset subtraction)
     public Vector3 SensorEulerAnglesRaw { get; private set; } // Raw uncalibrated angles from sensor
 
+    /// <summary>True once at least one data packet has been received from the physical sensor.</summary>
+    public bool IsConnected { get; private set; } = false;
+
     [Header("Calibration")]
     [Tooltip("Press this key to calibrate neutral position for pitch, yaw, and roll")]
     public KeyCode calibrateKey = KeyCode.C;
@@ -134,6 +137,7 @@ public class OpenZenMoveObject : MonoBehaviour
                 float z = invSqrt2 * fq.getitem(3);
                 
                 // Update public properties
+                IsConnected = true;
                 SensorOrientation = new Quaternion(y - z,  x - w, -w - x, y + z); // Unity order: xyzw
                 SensorEulerAngles = SensorOrientation.eulerAngles; // Convert quaternion to Euler angles (degrees)
                 
