@@ -200,7 +200,10 @@ public class LevelConfiguration : MonoBehaviour
             }
         }else{
             //get the number
-            sceneNumber = int.Parse(name.Split(' ')[0].ToString());
+            if (!string.IsNullOrEmpty(name) && char.IsDigit(name[0]))
+                sceneNumber = int.Parse(name.Split(' ')[0]);
+            else
+                sceneNumber = 0;
         }
         print("Scene number: " + sceneNumber);
         string haptics = SceneSelectorScript._haptics? "Haptics" : "NonHaptics";
