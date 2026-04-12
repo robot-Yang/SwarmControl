@@ -663,6 +663,7 @@ public class MigrationPointController : MonoBehaviour
 
         if(CameraMovement.embodiedDrone == null)
         {
+            if (CameraMovement.cam == null) return;
             body = CameraMovement.cam.transform;
             right = body.right;
             forward = body.up;

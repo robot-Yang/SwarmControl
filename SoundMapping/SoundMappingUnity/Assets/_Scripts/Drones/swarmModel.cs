@@ -362,6 +362,8 @@ public class swarmModel : MonoBehaviour
 
     void refreshSwarm()
     {
+        if (swarmHolder == null) return;
+
         refreshParameters();
 
         network = new NetworkCreator(drones);
