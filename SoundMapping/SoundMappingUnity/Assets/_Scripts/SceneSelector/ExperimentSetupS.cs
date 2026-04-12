@@ -73,7 +73,7 @@ public class ExperimentSetupS : MonoBehaviour
         confirmText.text = "Are you sure you want to start the experiment? \n\n" +
             "PID: " + SceneSelectorScript.pid + "\n" +
             "Haptics: " + SceneSelectorScript._haptics + "\n" +
-            "TDV first : " + SceneSelectorScript._order;
+            "Main first : " + SceneSelectorScript._order;
 
 
         confirmGO.SetActive(true);

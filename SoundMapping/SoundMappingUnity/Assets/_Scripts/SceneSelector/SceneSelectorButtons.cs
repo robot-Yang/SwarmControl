@@ -40,7 +40,7 @@ public class SceneSelectorScriptEditor : Editor
         {
             style.normal.textColor = Color.white;
         }
-        EditorGUILayout.LabelField("TDV First : " + SceneSelectorScript._order, style);
+        EditorGUILayout.LabelField("Main First : " + SceneSelectorScript._order, style);
 
         // Find all scenes in "Assets/Scenes/Training"
         string[] sceneGuids = AssetDatabase.FindAssets("t:Scene", new[] { myScript.assetPathTraining });
@@ -60,70 +60,22 @@ public class SceneSelectorScriptEditor : Editor
         }
 
 
-        //start vertical layout
         EditorGUILayout.BeginVertical();
 
         EditorGUILayout.BeginHorizontal();
 
-        //make a button for Demo Scene
-        if (GUILayout.Button("Obstacles FPV "))
+        if (GUILayout.Button("Pablo"))
         {
-            // Tell our script to load this scene (unload the previous one if any)
             myScript.SelectTrainingFromButton(myScript.ObstacleFPV);
         }
 
-        if (GUILayout.Button("Obstacles TDV "))
+        if (GUILayout.Button("Main"))
         {
-            // Tell our script to load this scene (unload the previous one if any)
-            myScript.SelectTrainingFromButton(myScript.ObstacleTPV);
-        }
-
-        if (GUILayout.Button("Collectibles FPV "))
-        {
-            // Tell our script to load this scene (unload the previous one if any)
-            myScript.SelectTrainingFromButton(myScript.CollectibleFPV);
-        }
-
-        if (GUILayout.Button("Collectibles TDV "))
-        {
-            // Tell our script to load this scene (unload the previous one if any)
-            myScript.SelectTrainingFromButton(myScript.CollectibleTPV);
+            myScript.SelectTrainingFromButton(myScript.ObstacleFPV2);
         }
 
         EditorGUILayout.EndHorizontal();
 
-        EditorGUILayout.BeginHorizontal();
-
-        //make a button for Demo Scene
-        if (GUILayout.Button("Obstacles FPV 2"))
-        {
-            // Tell our script to load this scene (unload the previous one if any)
-            myScript.SelectTrainingFromButton(myScript.ObstacleFPV1);
-        }
-
-        if (GUILayout.Button("Obstacles TDV 2"))
-        {
-            // Tell our script to load this scene (unload the previous one if any)
-            myScript.SelectTrainingFromButton(myScript.ObstacleTPV1);
-        }
-
-        if (GUILayout.Button("Collectibles FPV 2"))
-        {
-            // Tell our script to load this scene (unload the previous one if any)
-            myScript.SelectTrainingFromButton(myScript.CollectibleFPV1);
-        }
-
-        if (GUILayout.Button("Collectibles TDV 2"))
-        {
-            // Tell our script to load this scene (unload the previous one if any)
-            myScript.SelectTrainingFromButton(myScript.CollectibleTPV1);
-        }
-
-        EditorGUILayout.EndHorizontal();
-
-        //button unload all scenes
-
-        //end vertical layout
         EditorGUILayout.EndVertical();
 
 

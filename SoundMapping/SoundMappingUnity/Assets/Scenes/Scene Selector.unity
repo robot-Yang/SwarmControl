@@ -377,6 +377,7 @@ MonoBehaviour:
   m_DeselectOnBackgroundClick: 1
   m_PointerBehavior: 0
   m_CursorLockBehavior: 0
+  m_ScrollDeltaPerTick: 6
 --- !u!1 &179030187
 GameObject:
   m_ObjectHideFlags: 0
@@ -1988,17 +1989,11 @@ MonoBehaviour:
   isLoading: 0
   scenes: []
   ObstacleFPV: FPVObs
-  ObstacleFPV1: FPVObs_2
-  ObstacleTPV: TDVObs
-  ObstacleTPV1: TDVObs_1
-  CollectibleFPV: FPVCollectibles
-  CollectibleFPV1: FPVCollectibles_1
-  CollectibleTPV: TDVCollectibles
-  CollectibleTPV1: TDVCollectibles_1
+  ObstacleFPV2: Main
   assetPathTraining: Assets/Scenes/TrainingFinal
   hapticsEnabled: 1
   autoLoadOnStart: 1
-  autoLoadSceneName: FPVObs_2
+  autoLoadSceneName: Main
 --- !u!1 &1166913635
 GameObject:
   m_ObjectHideFlags: 0

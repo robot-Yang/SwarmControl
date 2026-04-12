@@ -215,8 +215,20 @@ public class DriftCorrector : MonoBehaviour
         float dt = Time.deltaTime;
         if (dt < 1e-6f) return;
 
-        float leftRate = (leftEuler - _prevLeftEuler).magnitude / dt;
-        float rightRate = (rightEuler - _prevRightEuler).magnitude / dt;
+        // Normalize each component to -180..180 before computing delta magnitude.
+        // Without this, a wraparound (e.g. 359° → 1°) produces a spurious ~358°/s
+        // rate that prevents ZUPT from ever locking near the 0°/360° boundary.
+        Vector3 deltaLeft = new Vector3(
+            NormalizeAngle(leftEuler.x - _prevLeftEuler.x),
+            NormalizeAngle(leftEuler.y - _prevLeftEuler.y),
+            NormalizeAngle(leftEuler.z - _prevLeftEuler.z));
+        Vector3 deltaRight = new Vector3(
+            NormalizeAngle(rightEuler.x - _prevRightEuler.x),
+            NormalizeAngle(rightEuler.y - _prevRightEuler.y),
+            NormalizeAngle(rightEuler.z - _prevRightEuler.z));
+
+        float leftRate = deltaLeft.magnitude / dt;
+        float rightRate = deltaRight.magnitude / dt;
 
         _prevLeftEuler = leftEuler;
         _prevRightEuler = rightEuler;
@@ -333,6 +345,17 @@ public class DriftCorrector : MonoBehaviour
         // Reset ZUPT state
         _stillTimer = 0f;
         _zuptLocked = false;
+    }
+
+    // ============================================
+    // HELPERS
+    // ============================================
+
+    float NormalizeAngle(float angle)
+    {
+        if (angle > 180f)  return angle - 360f;
+        if (angle < -180f) return angle + 360f;
+        return angle;
     }
 
     // ============================================

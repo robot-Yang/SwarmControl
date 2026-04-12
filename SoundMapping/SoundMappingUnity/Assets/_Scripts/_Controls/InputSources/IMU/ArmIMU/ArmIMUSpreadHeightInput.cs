@@ -164,8 +164,13 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
 
         float leftRelPitch  = NormalizeAngle(leftEuler.x);
         float rightRelPitch = NormalizeAngle(rightEuler.x);
-        float leftRelYaw    = NormalizeAngle(leftEuler.y);
-        float rightRelYaw   = NormalizeAngle(rightEuler.y);
+
+        // Swing-twist decomposition: isolate the Y-axis (yaw) component of each
+        // delta quaternion. Unlike eulerAngles.y or horizontal projection, this is
+        // mathematically immune to pitch and roll regardless of rotation order —
+        // so raising the arms for height no longer bleeds into spread.
+        float leftRelYaw  = ExtractYawTwist(leftDelta);
+        float rightRelYaw = ExtractYawTwist(rightDelta);
 
         ComputeHeight(leftRelPitch, rightRelPitch);
         ComputeSpread(leftRelYaw, rightRelYaw);
@@ -255,6 +260,24 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     // HELPERS
     // ============================================
 
+    /// <summary>
+    /// Extracts the pure yaw (Y-axis rotation) from a quaternion via swing-twist decomposition.
+    /// The twist is the component of the rotation that acts around the Y axis; the swing is
+    /// everything else (pitch + roll). By discarding the swing we get a yaw value that is
+    /// completely independent of how much the arm is pitched or rolled.
+    /// </summary>
+    float ExtractYawTwist(Quaternion q)
+    {
+        // The twist quaternion around Y is: (0, q.y, 0, q.w), then normalized.
+        // Proof: for any combined pitch θ + yaw φ quaternion, this always returns φ.
+        float magnitude = Mathf.Sqrt(q.y * q.y + q.w * q.w);
+        if (magnitude < 1e-6f) return 0f;
+
+        float twistY = q.y / magnitude;
+        float twistW = q.w / magnitude;
+        return 2f * Mathf.Atan2(twistY, twistW) * Mathf.Rad2Deg;
+    }
+
     float NormalizeAngle(float angle)
     {
         if (angle > 180f)  return angle - 360f;
@@ -276,18 +299,26 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
 
         if (IsAvailable)
         {
-            Quaternion chestRot = chestIMU.SensorOrientation;
+            Quaternion chestRot   = chestIMU.SensorOrientation;
             Quaternion leftDelta  = Quaternion.Inverse(_leftNeutralRel)  * (Quaternion.Inverse(chestRot) * leftArmIMU.SensorOrientation);
             Quaternion rightDelta = Quaternion.Inverse(_rightNeutralRel) * (Quaternion.Inverse(chestRot) * rightArmIMU.SensorOrientation);
 
-            float lp = NormalizeAngle(leftDelta.eulerAngles.x);
-            float rp = NormalizeAngle(rightDelta.eulerAngles.x);
+            // All 3 Euler axes — lets us see which axis arm-spreading actually moves
+            float lx = NormalizeAngle(leftDelta.eulerAngles.x);
             float ly = NormalizeAngle(leftDelta.eulerAngles.y);
+            float lz = NormalizeAngle(leftDelta.eulerAngles.z);
+            float rx = NormalizeAngle(rightDelta.eulerAngles.x);
             float ry = NormalizeAngle(rightDelta.eulerAngles.y);
+            float rz = NormalizeAngle(rightDelta.eulerAngles.z);
+
+            // Swing-twist yaw — what ComputeSpread actually receives
+            float lyTwist = ExtractYawTwist(leftDelta);
+            float ryTwist = ExtractYawTwist(rightDelta);
 
             GUILayout.Label($"Calibrated: {_calibrated}");
-            GUILayout.Label($"Rel Pitch  L:{lp:F1}°  R:{rp:F1}°");
-            GUILayout.Label($"Rel Yaw    L:{ly:F1}°  R:{ry:F1}°  Diff:{Mathf.Abs(ly - ry):F1}°");
+            GUILayout.Label($"Left  delta  X:{lx:F1}°  Y:{ly:F1}°  Z:{lz:F1}°");
+            GUILayout.Label($"Right delta  X:{rx:F1}°  Y:{ry:F1}°  Z:{rz:F1}°");
+            GUILayout.Label($"Twist Yaw  L:{lyTwist:F1}°  R:{ryTwist:F1}°  Diff:{Mathf.Abs(lyTwist - ryTwist):F1}°");
             GUILayout.Label($"Height Output: {HeightControl:F3}");
             GUILayout.Label($"Spread Output: {SpreadControl:F2}" + (spreadMode == SpreadControlMode.Absolute ? "m" : " rate"));
         }
