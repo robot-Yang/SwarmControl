@@ -42,12 +42,7 @@ public class CameraMovement : MonoBehaviour
     void Start()
     {
         _this = gameObject;
-
-
-        cam = Camera.main;
-        cam.transform.position = new Vector3(0, DEFAULT_HEIGHT_CAMERA, 0);
         heightCamera = DEFAULT_HEIGHT_CAMERA;
-        initialCamRotation = cam.transform.rotation;
 
         // Begin in top-down view mode
         currentState = CameraState.TDView;
@@ -55,6 +50,14 @@ public class CameraMovement : MonoBehaviour
 
     void Update()
     {
+        // Re-acquire Camera.main each frame until found (OVRCameraRig may not be ready at Start)
+        if (cam == null)
+        {
+            cam = Camera.main;
+            if (cam == null) return;
+            cam.transform.position = new Vector3(0, DEFAULT_HEIGHT_CAMERA, 0);
+            initialCamRotation = cam.transform.rotation;
+        }
 
       //  print("CameraMovement: " + idLeader + " Selected: " + MigrationPointController.idLeader);
 

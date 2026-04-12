@@ -1,1 +1,0 @@
-To find your COM port on mac: ls /dev/tty.*

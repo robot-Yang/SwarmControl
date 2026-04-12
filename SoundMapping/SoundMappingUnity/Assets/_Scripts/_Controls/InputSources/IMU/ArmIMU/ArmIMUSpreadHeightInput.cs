@@ -52,11 +52,19 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     // SPREAD SETTINGS
     // ============================================
     [Header("Spread Mapping")]
-    [Tooltip("Absolute: arm angle maps to target meters. RateBased: arm angle maps to rate of change.")]
-    public SpreadControlMode spreadMode = SpreadControlMode.Absolute;
+    [Tooltip("Absolute: arm angle maps to target meters. RateBased: arm angle maps to rate of change (-1..+1).")]
+    public SpreadControlMode spreadMode = SpreadControlMode.RateBased;
 
-    [Tooltip("Yaw angle difference (degrees) between arms that maps to maximum spread (1.0)")]
-    public float yawMaxSpreadAngle = 120f;
+    [Tooltip(
+        "PitchDiff — left arm up / right arm down (orthogonal to height by construction)\n" +
+        "Y         — arms swing sideways (shoulder abduction, yaw twist)\n" +
+        "Z         — forearms twist outward (roll twist)\n" +
+        "Check the debug overlay: perform your spread gesture and see which row changes.")]
+    public enum SpreadAxis { PitchDiff, Y, Z, X }
+    public SpreadAxis spreadAxis = SpreadAxis.Y;
+
+    [Tooltip("Yaw angle difference (degrees) between arms from neutral that maps to maximum spread rate (+1.0). Arms neutral-forward = 0 rate. Arms wide apart = max expand. Arms crossed = max shrink.")]
+    public float yawMaxSpreadAngle = 90f;
 
     [Tooltip("Ignore yaw differences smaller than this (degrees)")]
     public float yawDeadzone = 5f;
@@ -114,9 +122,10 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     public float SpreadControl { get; private set; }
 
     /// <summary>
-    /// Returns true when all three IMU references are assigned.
+    /// Returns true when all three IMUs are assigned AND have received at least one data packet.
     /// </summary>
-    public bool IsAvailable => chestIMU != null && leftArmIMU != null && rightArmIMU != null;
+    public bool IsAvailable => chestIMU != null && leftArmIMU != null && rightArmIMU != null
+        && chestIMU.IsConnected && leftArmIMU.IsConnected && rightArmIMU.IsConnected;
 
     /// <summary>
     /// True when spread outputs absolute meters, false when rate-based (-1..+1).
@@ -129,7 +138,10 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
 
     void Update()
     {
-        if (!_initialized && autoCalibrateOnStart && Time.frameCount > 5)
+        // Auto-calibrate only once all three sensors have received real data.
+        // Checking IsAvailable (which requires IsConnected) prevents calibrating
+        // against Quaternion.identity when sensors haven't connected yet.
+        if (!_initialized && autoCalibrateOnStart && IsAvailable)
         {
             CalibrateNeutral();
             _initialized = true;
@@ -164,11 +176,26 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
 
         float leftRelPitch  = NormalizeAngle(leftEuler.x);
         float rightRelPitch = NormalizeAngle(rightEuler.x);
-        float leftRelYaw    = NormalizeAngle(leftEuler.y);
-        float rightRelYaw   = NormalizeAngle(rightEuler.y);
 
-        ComputeHeight(leftRelPitch, rightRelPitch);
-        ComputeSpread(leftRelYaw, rightRelYaw);
+        // Swing-twist decomposition: isolate the Y-axis (yaw) component of each
+        // delta quaternion. Unlike eulerAngles.y or horizontal projection, this is
+        // mathematically immune to pitch and roll regardless of rotation order —
+        // so raising the arms for height no longer bleeds into spread.
+        // PitchDiff: spread = |leftPitch - rightPitch|
+        // Orthogonal to height (height = avg pitch, spread = pitch difference).
+        // One arm up + other arm down = max spread; both arms same = zero spread.
+        if (spreadAxis == SpreadAxis.PitchDiff)
+        {
+            ComputeHeight(leftRelPitch, rightRelPitch);
+            ComputeSpread(leftRelPitch, rightRelPitch);  // reuse pitch values; ComputeSpread takes abs diff
+        }
+        else
+        {
+            float leftRelYaw  = ExtractAxisTwist(leftDelta,  spreadAxis);
+            float rightRelYaw = ExtractAxisTwist(rightDelta, spreadAxis);
+            ComputeHeight(leftRelPitch, rightRelPitch);
+            ComputeSpread(leftRelYaw, rightRelYaw);
+        }
     }
 
     // ============================================
@@ -210,11 +237,11 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
         }
         else
         {
-            // Rate-based: signed yaw difference → rate of change (-1..+1).
-            // Arms at neutral = 0 rate = hold current spread.
-            // Arms spread wider than neutral = positive rate = expanding.
-            // Arms closer than neutral = negative rate = contracting.
-            float signedDiff = leftYaw - rightYaw;
+            // Rate-based: rightYaw - leftYaw → rate of change (-1..+1).
+            // Neutral (arms forward): both yaws ≈ 0 → rate = 0 → hold spread.
+            // Arms swinging wide (left goes −, right goes +): rightYaw - leftYaw is large positive → expand.
+            // Arms pulled inward / crossed (left goes +, right goes −): negative → contract.
+            float signedDiff = rightYaw - leftYaw;
             if (Mathf.Abs(signedDiff) < yawDeadzone) signedDiff = 0f;
 
             float signedNorm = Mathf.Clamp(signedDiff / yawMaxSpreadAngle, -1f, 1f);
@@ -255,6 +282,26 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     // HELPERS
     // ============================================
 
+    /// <summary>
+    /// Extracts the rotation around a chosen axis via swing-twist decomposition.
+    /// Independent of the other two axes — no cross-axis bleed.
+    /// </summary>
+    float ExtractAxisTwist(Quaternion q, SpreadAxis axis)
+    {
+        float component;
+        switch (axis)
+        {
+            case SpreadAxis.X: component = q.x; break;
+            case SpreadAxis.Z: component = q.z; break;
+            default:           component = q.y; break; // Y
+        }
+        float magnitude = Mathf.Sqrt(component * component + q.w * q.w);
+        if (magnitude < 1e-6f) return 0f;
+        float twist     = component / magnitude;
+        float twistW    = q.w       / magnitude;
+        return 2f * Mathf.Atan2(twist, twistW) * Mathf.Rad2Deg;
+    }
+
     float NormalizeAngle(float angle)
     {
         if (angle > 180f)  return angle - 360f;
@@ -272,22 +319,36 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
 
         GUILayout.BeginArea(new Rect(10, 580, 340, 160));
         GUILayout.Label("<b>Arm IMU Spread/Height</b>");
-        GUILayout.Label($"Available: {IsAvailable}");
+        bool chestOk = chestIMU != null && chestIMU.IsConnected;
+        bool leftOk  = leftArmIMU != null && leftArmIMU.IsConnected;
+        bool rightOk = rightArmIMU != null && rightArmIMU.IsConnected;
+        GUILayout.Label($"Sensors: Chest={chestOk} L={leftOk} R={rightOk}  Calibrated={_calibrated}");
 
         if (IsAvailable)
         {
-            Quaternion chestRot = chestIMU.SensorOrientation;
+            Quaternion chestRot   = chestIMU.SensorOrientation;
             Quaternion leftDelta  = Quaternion.Inverse(_leftNeutralRel)  * (Quaternion.Inverse(chestRot) * leftArmIMU.SensorOrientation);
             Quaternion rightDelta = Quaternion.Inverse(_rightNeutralRel) * (Quaternion.Inverse(chestRot) * rightArmIMU.SensorOrientation);
 
-            float lp = NormalizeAngle(leftDelta.eulerAngles.x);
-            float rp = NormalizeAngle(rightDelta.eulerAngles.x);
+            // All 3 Euler axes — lets us see which axis arm-spreading actually moves
+            float lx = NormalizeAngle(leftDelta.eulerAngles.x);
             float ly = NormalizeAngle(leftDelta.eulerAngles.y);
+            float lz = NormalizeAngle(leftDelta.eulerAngles.z);
+            float rx = NormalizeAngle(rightDelta.eulerAngles.x);
             float ry = NormalizeAngle(rightDelta.eulerAngles.y);
+            float rz = NormalizeAngle(rightDelta.eulerAngles.z);
+
+            float lyTwist = ExtractAxisTwist(leftDelta,  SpreadAxis.Y);
+            float ryTwist = ExtractAxisTwist(rightDelta, SpreadAxis.Y);
 
             GUILayout.Label($"Calibrated: {_calibrated}");
-            GUILayout.Label($"Rel Pitch  L:{lp:F1}°  R:{rp:F1}°");
-            GUILayout.Label($"Rel Yaw    L:{ly:F1}°  R:{ry:F1}°  Diff:{Mathf.Abs(ly - ry):F1}°");
+            GUILayout.Label($"Left  delta  X:{lx:F1}°  Y:{ly:F1}°  Z:{lz:F1}°");
+            GUILayout.Label($"Right delta  X:{rx:F1}°  Y:{ry:F1}°  Z:{rz:F1}°");
+            float lyTwistZ = ExtractAxisTwist(leftDelta,  SpreadAxis.Z);
+            float ryTwistZ = ExtractAxisTwist(rightDelta, SpreadAxis.Z);
+            GUILayout.Label($"Twist Y  L:{lyTwist:F1}°  R:{ryTwist:F1}°  Diff:{Mathf.Abs(lyTwist - ryTwist):F1}°");
+            GUILayout.Label($"Twist Z  L:{lyTwistZ:F1}°  R:{ryTwistZ:F1}°  Diff:{Mathf.Abs(lyTwistZ - ryTwistZ):F1}°");
+            GUILayout.Label($"SpreadAxis: {spreadAxis}");
             GUILayout.Label($"Height Output: {HeightControl:F3}");
             GUILayout.Label($"Spread Output: {SpreadControl:F2}" + (spreadMode == SpreadControlMode.Absolute ? "m" : " rate"));
         }

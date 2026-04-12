@@ -161,9 +161,24 @@ public class InputFusionManager : MonoBehaviour
         FuseButtonInputs();
 
         // Check for calibration button press - calibrate immediately
-        if (CalibratePressed)
+        // Start 3-second countdown on button press (only if not already calibrating)
+        if (CalibratePressed && !isCalibrating)
         {
-            PerformCalibration();
+            isCalibrating = true;
+            calibrationCountdown = 3f;
+            Debug.Log("Calibration in 3 seconds — hold steady!");
+        }
+
+        // Tick countdown and fire when it reaches zero
+        if (isCalibrating)
+        {
+            calibrationCountdown -= Time.deltaTime;
+            if (calibrationCountdown <= 0f)
+            {
+                PerformCalibration();
+                isCalibrating = false;
+                calibrationCountdown = 0f;
+            }
         }
     }
 
@@ -386,8 +401,14 @@ public class InputFusionManager : MonoBehaviour
             Debug.Log("✓ IMU yaw calibrated");
         }
 
-        // Calibrate arm IMU spread/height
-        if (armIMUInput != null && armIMUInput.IsAvailable)
+        // Calibrate arm IMU spread/height — go through DriftCorrector when present
+        // so that ZUPT state is also reset (bypassing it leaves the corrector locked)
+        if (driftCorrector != null && driftCorrector.IsAvailable)
+        {
+            driftCorrector.CalibrateNeutral();
+            Debug.Log("✓ Arm IMU spread/height calibrated (via DriftCorrector)");
+        }
+        else if (armIMUInput != null && armIMUInput.IsAvailable)
         {
             armIMUInput.CalibrateNeutral();
             Debug.Log("✓ Arm IMU spread/height calibrated");

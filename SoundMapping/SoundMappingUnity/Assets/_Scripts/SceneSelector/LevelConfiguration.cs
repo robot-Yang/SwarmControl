@@ -200,7 +200,10 @@ public class LevelConfiguration : MonoBehaviour
             }
         }else{
             //get the number
-            sceneNumber = int.Parse(name.Split(' ')[0].ToString());
+            if (!string.IsNullOrEmpty(name) && char.IsDigit(name[0]))
+                sceneNumber = int.Parse(name.Split(' ')[0]);
+            else
+                sceneNumber = 0;
         }
         print("Scene number: " + sceneNumber);
         string haptics = SceneSelectorScript._haptics? "Haptics" : "NonHaptics";
@@ -210,12 +213,12 @@ public class LevelConfiguration : MonoBehaviour
         string path = Application.dataPath + "/SceneDescription/" + fileName;
 
         //check if the files exists if not create it
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
         if(!System.IO.File.Exists(path))
         {
-           // System.IO.File.WriteAllText(path, "Scene" + sceneNumber + haptics + "\n");
             System.IO.File.WriteAllText(path, "");
         }
-    
+
         string[] lines = System.IO.File.ReadAllLines(path);
 
         string text = "";
