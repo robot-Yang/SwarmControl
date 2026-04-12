@@ -52,19 +52,19 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     // SPREAD SETTINGS
     // ============================================
     [Header("Spread Mapping")]
-    [Tooltip("Absolute: arm angle maps to target meters. RateBased: arm angle maps to rate of change.")]
-    public SpreadControlMode spreadMode = SpreadControlMode.Absolute;
+    [Tooltip("Absolute: arm angle maps to target meters. RateBased: arm angle maps to rate of change (-1..+1).")]
+    public SpreadControlMode spreadMode = SpreadControlMode.RateBased;
 
-    [Tooltip("Which rotation axis of the arm delta drives spread.\n" +
-             "Y = arm swings sideways (shoulder abduction)\n" +
-             "Z = arm rolls / forearm twists outward\n" +
-             "X = arm pitches — avoid (same axis as height)\n" +
-             "Check the debug overlay: spread arms and see which axis changes.")]
-    public enum SpreadAxis { Y, Z, X }
+    [Tooltip(
+        "PitchDiff — left arm up / right arm down (orthogonal to height by construction)\n" +
+        "Y         — arms swing sideways (shoulder abduction, yaw twist)\n" +
+        "Z         — forearms twist outward (roll twist)\n" +
+        "Check the debug overlay: perform your spread gesture and see which row changes.")]
+    public enum SpreadAxis { PitchDiff, Y, Z, X }
     public SpreadAxis spreadAxis = SpreadAxis.Y;
 
-    [Tooltip("Yaw angle difference (degrees) between arms that maps to maximum spread (1.0)")]
-    public float yawMaxSpreadAngle = 120f;
+    [Tooltip("Yaw angle difference (degrees) between arms from neutral that maps to maximum spread rate (+1.0). Arms neutral-forward = 0 rate. Arms wide apart = max expand. Arms crossed = max shrink.")]
+    public float yawMaxSpreadAngle = 90f;
 
     [Tooltip("Ignore yaw differences smaller than this (degrees)")]
     public float yawDeadzone = 5f;
@@ -181,11 +181,21 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
         // delta quaternion. Unlike eulerAngles.y or horizontal projection, this is
         // mathematically immune to pitch and roll regardless of rotation order —
         // so raising the arms for height no longer bleeds into spread.
-        float leftRelYaw  = ExtractAxisTwist(leftDelta,  spreadAxis);
-        float rightRelYaw = ExtractAxisTwist(rightDelta, spreadAxis);
-
-        ComputeHeight(leftRelPitch, rightRelPitch);
-        ComputeSpread(leftRelYaw, rightRelYaw);
+        // PitchDiff: spread = |leftPitch - rightPitch|
+        // Orthogonal to height (height = avg pitch, spread = pitch difference).
+        // One arm up + other arm down = max spread; both arms same = zero spread.
+        if (spreadAxis == SpreadAxis.PitchDiff)
+        {
+            ComputeHeight(leftRelPitch, rightRelPitch);
+            ComputeSpread(leftRelPitch, rightRelPitch);  // reuse pitch values; ComputeSpread takes abs diff
+        }
+        else
+        {
+            float leftRelYaw  = ExtractAxisTwist(leftDelta,  spreadAxis);
+            float rightRelYaw = ExtractAxisTwist(rightDelta, spreadAxis);
+            ComputeHeight(leftRelPitch, rightRelPitch);
+            ComputeSpread(leftRelYaw, rightRelYaw);
+        }
     }
 
     // ============================================
@@ -227,11 +237,11 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
         }
         else
         {
-            // Rate-based: signed yaw difference → rate of change (-1..+1).
-            // Arms at neutral = 0 rate = hold current spread.
-            // Arms spread wider than neutral = positive rate = expanding.
-            // Arms closer than neutral = negative rate = contracting.
-            float signedDiff = leftYaw - rightYaw;
+            // Rate-based: rightYaw - leftYaw → rate of change (-1..+1).
+            // Neutral (arms forward): both yaws ≈ 0 → rate = 0 → hold spread.
+            // Arms swinging wide (left goes −, right goes +): rightYaw - leftYaw is large positive → expand.
+            // Arms pulled inward / crossed (left goes +, right goes −): negative → contract.
+            float signedDiff = rightYaw - leftYaw;
             if (Mathf.Abs(signedDiff) < yawDeadzone) signedDiff = 0f;
 
             float signedNorm = Mathf.Clamp(signedDiff / yawMaxSpreadAngle, -1f, 1f);
