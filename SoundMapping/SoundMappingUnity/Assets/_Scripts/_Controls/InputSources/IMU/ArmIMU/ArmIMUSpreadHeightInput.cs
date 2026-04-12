@@ -55,6 +55,14 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     [Tooltip("Absolute: arm angle maps to target meters. RateBased: arm angle maps to rate of change.")]
     public SpreadControlMode spreadMode = SpreadControlMode.Absolute;
 
+    [Tooltip("Which rotation axis of the arm delta drives spread.\n" +
+             "Y = arm swings sideways (shoulder abduction)\n" +
+             "Z = arm rolls / forearm twists outward\n" +
+             "X = arm pitches — avoid (same axis as height)\n" +
+             "Check the debug overlay: spread arms and see which axis changes.")]
+    public enum SpreadAxis { Y, Z, X }
+    public SpreadAxis spreadAxis = SpreadAxis.Y;
+
     [Tooltip("Yaw angle difference (degrees) between arms that maps to maximum spread (1.0)")]
     public float yawMaxSpreadAngle = 120f;
 
@@ -173,8 +181,8 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
         // delta quaternion. Unlike eulerAngles.y or horizontal projection, this is
         // mathematically immune to pitch and roll regardless of rotation order —
         // so raising the arms for height no longer bleeds into spread.
-        float leftRelYaw  = ExtractYawTwist(leftDelta);
-        float rightRelYaw = ExtractYawTwist(rightDelta);
+        float leftRelYaw  = ExtractAxisTwist(leftDelta,  spreadAxis);
+        float rightRelYaw = ExtractAxisTwist(rightDelta, spreadAxis);
 
         ComputeHeight(leftRelPitch, rightRelPitch);
         ComputeSpread(leftRelYaw, rightRelYaw);
@@ -265,21 +273,23 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     // ============================================
 
     /// <summary>
-    /// Extracts the pure yaw (Y-axis rotation) from a quaternion via swing-twist decomposition.
-    /// The twist is the component of the rotation that acts around the Y axis; the swing is
-    /// everything else (pitch + roll). By discarding the swing we get a yaw value that is
-    /// completely independent of how much the arm is pitched or rolled.
+    /// Extracts the rotation around a chosen axis via swing-twist decomposition.
+    /// Independent of the other two axes — no cross-axis bleed.
     /// </summary>
-    float ExtractYawTwist(Quaternion q)
+    float ExtractAxisTwist(Quaternion q, SpreadAxis axis)
     {
-        // The twist quaternion around Y is: (0, q.y, 0, q.w), then normalized.
-        // Proof: for any combined pitch θ + yaw φ quaternion, this always returns φ.
-        float magnitude = Mathf.Sqrt(q.y * q.y + q.w * q.w);
+        float component;
+        switch (axis)
+        {
+            case SpreadAxis.X: component = q.x; break;
+            case SpreadAxis.Z: component = q.z; break;
+            default:           component = q.y; break; // Y
+        }
+        float magnitude = Mathf.Sqrt(component * component + q.w * q.w);
         if (magnitude < 1e-6f) return 0f;
-
-        float twistY = q.y / magnitude;
-        float twistW = q.w / magnitude;
-        return 2f * Mathf.Atan2(twistY, twistW) * Mathf.Rad2Deg;
+        float twist     = component / magnitude;
+        float twistW    = q.w       / magnitude;
+        return 2f * Mathf.Atan2(twist, twistW) * Mathf.Rad2Deg;
     }
 
     float NormalizeAngle(float angle)
@@ -318,14 +328,17 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
             float ry = NormalizeAngle(rightDelta.eulerAngles.y);
             float rz = NormalizeAngle(rightDelta.eulerAngles.z);
 
-            // Swing-twist yaw — what ComputeSpread actually receives
-            float lyTwist = ExtractYawTwist(leftDelta);
-            float ryTwist = ExtractYawTwist(rightDelta);
+            float lyTwist = ExtractAxisTwist(leftDelta,  SpreadAxis.Y);
+            float ryTwist = ExtractAxisTwist(rightDelta, SpreadAxis.Y);
 
             GUILayout.Label($"Calibrated: {_calibrated}");
             GUILayout.Label($"Left  delta  X:{lx:F1}°  Y:{ly:F1}°  Z:{lz:F1}°");
             GUILayout.Label($"Right delta  X:{rx:F1}°  Y:{ry:F1}°  Z:{rz:F1}°");
-            GUILayout.Label($"Twist Yaw  L:{lyTwist:F1}°  R:{ryTwist:F1}°  Diff:{Mathf.Abs(lyTwist - ryTwist):F1}°");
+            float lyTwistZ = ExtractAxisTwist(leftDelta,  SpreadAxis.Z);
+            float ryTwistZ = ExtractAxisTwist(rightDelta, SpreadAxis.Z);
+            GUILayout.Label($"Twist Y  L:{lyTwist:F1}°  R:{ryTwist:F1}°  Diff:{Mathf.Abs(lyTwist - ryTwist):F1}°");
+            GUILayout.Label($"Twist Z  L:{lyTwistZ:F1}°  R:{ryTwistZ:F1}°  Diff:{Mathf.Abs(lyTwistZ - ryTwistZ):F1}°");
+            GUILayout.Label($"SpreadAxis: {spreadAxis}");
             GUILayout.Label($"Height Output: {HeightControl:F3}");
             GUILayout.Label($"Spread Output: {SpreadControl:F2}" + (spreadMode == SpreadControlMode.Absolute ? "m" : " rate"));
         }
