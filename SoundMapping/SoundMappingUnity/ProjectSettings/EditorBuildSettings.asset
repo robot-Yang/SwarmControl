@@ -17,36 +17,6 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/SceneStudy/Main.unity
     guid: cdad1dfef79914a2590624d464d9173c
-  - enabled: 1
-    path: Assets/Scenes/TrainingFinal/1 Single Drone TDV.unity
-    guid: 7fd1455c7bf5f5a49ab61027830765e0
-  - enabled: 1
-    path: Assets/Scenes/TrainingFinal/2 Single Drone FPV.unity
-    guid: ff29c634b007cfb41ad25276bdabf66b
-  - enabled: 1
-    path: Assets/Scenes/TrainingFinal/5 Swicth View TDV.unity
-    guid: d1bc48418bc615b4a9890b3d24ca5353
-  - enabled: 1
-    path: Assets/Scenes/TrainingFinal/6 Swicth View FPV.unity
-    guid: b5ae467b55a8caa4f83d8fd056b33253
-  - enabled: 1
-    path: Assets/Scenes/TrainingFinal/7 Spreadness TDV.unity
-    guid: cdf73ffe26b61874c89983e0f90207e0
-  - enabled: 1
-    path: Assets/Scenes/TrainingFinal/8 Spreadness FPV.unity
-    guid: 0ba0f625fd1d790469778d976a468195
-  - enabled: 1
-    path: Assets/Scenes/TrainingFinal/9 Drone Network TDV.unity
-    guid: 64266b8580489594a8552e9548870c75
-  - enabled: 1
-    path: Assets/Scenes/TrainingFinal/10 Drone Network FPV.unity
-    guid: a82c89dfc882f1a4893e5105d7613899
-  - enabled: 1
-    path: Assets/Scenes/TrainingFinal/11 go Fast TDV.unity
-    guid: 08c1be84d152e514aaa50c98e8fc2bd4
-  - enabled: 1
-    path: Assets/Scenes/TrainingFinal/12 go Fast FPV.unity
-    guid: 1fe108dba75e21d44bd4381364f20dd5
   m_configObjects:
     Unity.XR.Oculus.Settings: {fileID: 11400000, guid: c96d974b024f6284f8deafc4f786ff62, type: 2}
     com.unity.xr.management.loader_settings: {fileID: 11400000, guid: b69339659d95f564c927621bb339fd0b, type: 2}
