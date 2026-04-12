@@ -2588,12 +2588,12 @@ MonoBehaviour:
   mediaPipeHeightInput: {fileID: 1134678125}
   armIMUInput: {fileID: 1134678131}
   driftCorrector: {fileID: 1134678130}
-  useIMUForMovement: 0
+  useIMUForMovement: 1
   useMetaQuestForRotation: 0
   useIMUForRotation: 0
   useMediaPipeForSpread: 0
   useMediaPipeForHeight: 0
-  useArmIMUForSpreadHeight: 0
+  useArmIMUForSpreadHeight: 1
   enableTraditionalFallback: 1
 --- !u!114 &1134678108
 MonoBehaviour:
@@ -2855,6 +2855,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3b57f1a1a2929234290b21d8ea7e06c6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  connectionDelay: 2
   OpenZenIoType: 1
   OpenZenIdentifier: 00:04:3E:5A:2B:70
   calibrateKey: 99

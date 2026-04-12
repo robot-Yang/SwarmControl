@@ -29,28 +29,31 @@ public class OpenZenMoveObject : MonoBehaviour
     /// <summary>True once at least one data packet has been received from the physical sensor.</summary>
     public bool IsConnected { get; private set; } = false;
 
+    [Header("Connection")]
+    [Tooltip("Seconds to wait before attempting to connect. Stagger multiple sensors (0, 1, 2) to avoid Bluetooth collisions.")]
+    public float connectionDelay = 0f;
+
     [Header("Calibration")]
     [Tooltip("Press this key to calibrate neutral position for pitch, yaw, and roll")]
     public KeyCode calibrateKey = KeyCode.C;
     [Tooltip("Automatically calibrate on start")]
     public bool autoCalibrateOnStart = true;
-    
+
     private Vector3 _calibrationOffset = Vector3.zero;
     private bool _initialized = false;
 
-    // Use this for initialization
     void Start()
     {
-        // create OpenZen
         OpenZen.ZenInit(mZenHandle);
+        StartCoroutine(ConnectAfterDelay());
+    }
 
-        // Hint: to get the io type and identifer for all connected sensor,
-        // you cant start the DiscoverSensorScene. The information of all 
-        // found sensors is printed in the debug console of Unity after
-        // the search is complete.
+    IEnumerator ConnectAfterDelay()
+    {
+        if (connectionDelay > 0f)
+            yield return new WaitForSeconds(connectionDelay);
 
-        print("Trying to connect to OpenZen Sensor on IO " + OpenZenIoType +
-            " with sensor name " + OpenZenIdentifier);
+        Debug.Log($"[OpenZen] Connecting to {OpenZenIdentifier} ({OpenZenIoType})...");
 
         var sensorInitError = OpenZen.ZenObtainSensorByName(mZenHandle,
             OpenZenIoType.ToString(),
