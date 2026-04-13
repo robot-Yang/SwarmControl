@@ -2,7 +2,6 @@
 
 SwarmControl is a VR research project comparing two methods of controlling a drone swarm. The study investigates how the input modality affects **task performance** and the **sense of embodiment** experienced by the operator.
 
-
 ---
 
 ## Motivation
@@ -115,5 +114,8 @@ SwarmControl/
 ## Next Steps
 
 Integrate full upper-body haptic feedback via a wearable haptic jacket, combining IMU-based swarm control with distributed haptic actuation across the torso — enabling closed-loop sensorimotor control of the swarm.
+
+Then, compare embodiement and performance metric between with/without haptic feedback using upper body based control. 
+
 
 ![IMU](images/back.png)
