@@ -75,7 +75,18 @@ public class swarmModel : MonoBehaviour
     public static float avgDist;
     public static float swarmAskingSpreadness = 0f;
 
-    public static int numberOfDroneDiscionnected => SwarmDisconnection.dronesID.Count;
+    public static int numberOfDroneDiscionnected
+    {
+        get
+        {
+            if (network == null || network.drones == null)
+                return 0;
+
+            int total = network.drones.Count;
+            int connected = (network.largestComponent == null) ? 0 : network.largestComponent.Count;
+            return Mathf.Max(total - connected, 0);
+        }
+    }
     public static int numberOfDroneCrashed => Timer.numberDroneDied;
 
     [Header("Gizmos")]
@@ -362,6 +373,8 @@ public class swarmModel : MonoBehaviour
 
     void refreshSwarm()
     {
+        if (swarmHolder == null) return;
+
         refreshParameters();
 
         network = new NetworkCreator(drones);
@@ -835,6 +848,7 @@ public class swarmModel : MonoBehaviour
 
     void getSwarmConnexion()
     {
+        if (network == null) return;
         List<DroneFake> connectedDrone = network.drones.ToList();
         bool hasNonMovable = drones.Exists(d => !d.isMovable);
         if (hasNonMovable)
@@ -872,7 +886,6 @@ public class swarmModel : MonoBehaviour
         scores = scores.OrderBy(s => s).ToList();
         if (scores.Count == 0)
         {
-            BrownToBlueNoise.AnalyseShrinking(0);
             swarmAskingSpreadness = 0;
             return;
         }
@@ -882,7 +895,6 @@ public class swarmModel : MonoBehaviour
         finalScore = Mathf.Min(finalScore, 1f);
         finalScore = 1 - Mathf.Max(finalScore, 0f);
 
-        BrownToBlueNoise.AnalyseShrinking(finalScore);
         swarmAskingSpreadness = finalScore;
     }
 

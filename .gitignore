@@ -1,0 +1,45 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+.venv
+venv/
+
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+sysinfo.txt
+
+# Visual Studio
+.vs/
+*.csproj
+*.sln
+ExportedObj/
+
+# JetBrains
+.idea/
+*.iml
+
+# Node
+node_modules/
+
+# OS
+Thumbs.db
+
+# Project-specific
+WebPages/OLD/

@@ -15,18 +15,8 @@ public class SceneSelectorScript : MonoBehaviour
     [HideInInspector] public static List<string> scenesPlayed = new List<string>();
 
     [HideInInspector] private string setupScene = "Setup";
-    [HideInInspector] public string ObstacleFPV = "FPVObs";
-    [HideInInspector] public string ObstacleFPV1 = "FPVObs_1";
-    [HideInInspector] public string ObstacleTPV = "TDVObs";
-    [HideInInspector] public string ObstacleTPV1 = "TDVObs_1";
-
-    [HideInInspector] public string CollectibleFPV = "FPVCollectibles";
-    [HideInInspector] public string CollectibleFPV1 = "FPVCollectibles_1";
-    [HideInInspector] public string CollectibleTPV = "TDVCollectibles";
-    [HideInInspector] public string CollectibleTPV1 = "TDVCollectibles_1";
-
-    [HideInInspector] public string assetPathTraining = "Assets/Scenes/TrainingFinal";
-
+    [HideInInspector] public string ObstacleFPV  = "Pablo";
+    [HideInInspector] public string ObstacleFPV2 = "Main";
 
     public static string pid = "default";
     public static bool _order = false;
@@ -39,7 +29,7 @@ public class SceneSelectorScript : MonoBehaviour
     public bool autoLoadOnStart = true;
 
     // Use the exact scene name (file name without .unity)
-    public string autoLoadSceneName = "FPVObs_2";
+    public string autoLoadSceneName = "Main";
 
     void Start()
     {
@@ -47,17 +37,6 @@ public class SceneSelectorScript : MonoBehaviour
         // For initial cleanup.
         StartCoroutine(UnloadAllScenesExcept("Scene Selector"));
 
-        // If using the UnityEditor to populate scenes:
-        #if UNITY_EDITOR
-        string[] sceneGuids = UnityEditor.AssetDatabase.FindAssets("t:Scene", new[] { assetPathTraining });
-        foreach (string guid in sceneGuids)
-        {
-            string scenePath = UnityEditor.AssetDatabase.GUIDToAssetPath(guid);
-            string sceneName = System.IO.Path.GetFileNameWithoutExtension(scenePath);
-            scenes.Add(sceneName);
-        }
-        #endif
-        
         // ✅ Use the experiment flow so all flags are set and swarm spawns
         if (autoLoadOnStart && !string.IsNullOrEmpty(autoLoadSceneName))
         {
@@ -186,62 +165,17 @@ public class SceneSelectorScript : MonoBehaviour
 
     public void addStudyScene()
     {
-        
         if (!_order)
         {
             scenesPlayed.Add(ObstacleFPV);
-
-            scenesPlayed.Add(ObstacleFPV1);
+            scenesPlayed.Add(ObstacleFPV2);
             tutorialPlayed.Add(scenesPlayed.Count - 1);
-
-          //  scenesPlayed.Add(ObstacleFPV);
-            scenesPlayed.Add(ObstacleTPV);
-            tutorialPlayed.Add(scenesPlayed.Count - 1);
-
-            scenesPlayed.Add(ObstacleTPV1);
-            tutorialPlayed.Add(scenesPlayed.Count - 1);
-
-            scenesPlayed.Add(CollectibleFPV);
-
-         //   scenesPlayed.Add(ObstacleTPV);
-            scenesPlayed.Add(CollectibleFPV1);
-            tutorialPlayed.Add(scenesPlayed.Count - 1);
-
-        //    scenesPlayed.Add(CollectibleFPV);
-            scenesPlayed.Add(CollectibleTPV);
-            tutorialPlayed.Add(scenesPlayed.Count - 1);
-
-            scenesPlayed.Add(CollectibleTPV1);
-            tutorialPlayed.Add(scenesPlayed.Count - 1);
-
-        //    scenesPlayed.Add(CollectibleTPV);
         }
         else
         {
-            scenesPlayed.Add(ObstacleTPV);
-
-            scenesPlayed.Add(ObstacleTPV1);
+            scenesPlayed.Add(ObstacleFPV2);
             tutorialPlayed.Add(scenesPlayed.Count - 1);
-           // scenesPlayed.Add(ObstacleTPV);
             scenesPlayed.Add(ObstacleFPV);
-            tutorialPlayed.Add(scenesPlayed.Count - 1);
-
-            scenesPlayed.Add(ObstacleFPV1);
-            tutorialPlayed.Add(scenesPlayed.Count - 1);
-
-            //  scenesPlayed.Add(ObstacleFPV);
-            scenesPlayed.Add(CollectibleTPV);
-
-            scenesPlayed.Add(CollectibleTPV1);
-            tutorialPlayed.Add(scenesPlayed.Count - 1);
-            //  scenesPlayed.Add(CollectibleTPV);
-            scenesPlayed.Add(CollectibleFPV);
-            tutorialPlayed.Add(scenesPlayed.Count - 1);
-
-            scenesPlayed.Add(CollectibleFPV1);
-            tutorialPlayed.Add(scenesPlayed.Count - 1);
-
-            //   scenesPlayed.Add(CollectibleFPV);
         }
     }
 

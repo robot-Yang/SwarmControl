@@ -2,7 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// Reads yaw (Y-axis rotation) from OpenZen IMU sensor for camera rotation control.
-/// Uses same sensor as IMUMovementInputBase but focuses on yaw instead of pitch/roll.
+/// Uses the same chest sensor as IMUMovementInput but focuses on yaw instead of pitch/roll.
 /// </summary>
 public class IMUYawInput : MonoBehaviour
 {
@@ -82,8 +82,8 @@ public class IMUYawInput : MonoBehaviour
     // ============================================
 
     /// <summary>
-    /// Converts IMU yaw angle to normalized rotation rate
-    /// Uses same logic as pitch/roll processing in IMUMovementInputBase
+    /// Converts IMU yaw angle to normalized rotation rate.
+    /// Uses the same deadzone + max-angle pattern as IMUMovementInput's pitch/roll processing.
     /// </summary>
     float ConvertYawToRotation(Vector3 eulerAngles)
     {
@@ -104,7 +104,7 @@ public class IMUYawInput : MonoBehaviour
         // Normalize to 0-1 range for mapping curve (same as pitch/roll)
         float yawNormalized = Mathf.Clamp01(Mathf.Abs(yaw) / yawMaxAngle);
 
-        // Apply linear mapping (rate-based, same as IMUMovementRateBased)
+        // Apply linear rate-based mapping
         float rotationMapped = yawNormalized * maxRotationSpeed;
 
         // Restore sign and apply inversion
