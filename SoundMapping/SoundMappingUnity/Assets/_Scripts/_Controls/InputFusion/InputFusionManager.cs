@@ -1,7 +1,8 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
-/// Central hub that fuses all input sources (traditional, IMU, VR, etc.) 
+/// Central hub that fuses all input sources (traditional, IMU, VR, etc.)
 /// and provides a unified API for swarm control.
 /// This is the ONLY class that MigrationPointController and CameraMovement should read from.
 /// </summary>
@@ -14,11 +15,12 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Keyboard and game controller input")]
     public TraditionalInput traditionalInput;
 
-    [Tooltip("IMU movement mode selector - manages switching between Linear/Exponential modes")]
-    public IMUMovementSelector imuMovementSelector;
+    [Tooltip("Chest IMU rate-based movement (forward/back tilt = forward speed; left/right tilt = strafe)")]
+    public IMUMovementInput imuMovementInput;
 
-    [Tooltip("Meta Quest headset for camera rotation (yaw)")]
-    public MetaQuestInput metaQuestInput;
+    [Tooltip("Meta Quest headset — rate-based camera yaw")]
+    [FormerlySerializedAs("metaQuestInput")]
+    public HeadsetYawInput headsetYawInput;
 
     [Tooltip("IMU yaw input for camera rotation from OpenZen sensor")]
     public IMUYawInput imuYawInput;
@@ -32,8 +34,21 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Arm IMU input — forearm sensors for spread and height (primary wearable source)")]
     public ArmIMUSpreadHeightInput armIMUInput;
 
-    [Tooltip("Optional drift corrector sitting in front of armIMUInput — leave empty to use raw IMU")]
-    public DriftCorrector driftCorrector;
+    [Tooltip("Optional Hand-IMU fusion sitting in front of armIMUInput — leave empty to use raw IMU")]
+    [FormerlySerializedAs("driftCorrector")]
+    public HandIMUFusion handIMUFusion;
+
+    [Tooltip("Meta Quest hand tracking — rate-based height")]
+    public HandHeightInput handHeightInput;
+
+    [Tooltip("Meta Quest hand tracking — rate-based spread")]
+    public HandSpreadInput handSpreadInput;
+
+    [Tooltip("Meta Quest Touch controllers — rate-based height")]
+    public ControllerHeightInput controllerHeightInput;
+
+    [Tooltip("Meta Quest Touch controllers — rate-based spread")]
+    public ControllerSpreadInput controllerSpreadInput;
 
     // ============================================
     // INPUT PRIORITY TOGGLES
@@ -56,6 +71,18 @@ public class InputFusionManager : MonoBehaviour
 
     [Tooltip("Use forearm IMUs for spread and height (takes priority over MediaPipe when enabled)")]
     public bool useArmIMUForSpreadHeight = false;
+
+    [Tooltip("Use Meta Quest hand tracking for height (priority below ArmIMU)")]
+    public bool useMetaHandsForHeight = false;
+
+    [Tooltip("Use Meta Quest hand tracking for spread (priority below ArmIMU)")]
+    public bool useMetaHandsForSpread = false;
+
+    [Tooltip("Use Meta Quest Touch controllers for height (priority below MetaHands)")]
+    public bool useControllersForHeight = false;
+
+    [Tooltip("Use Meta Quest Touch controllers for spread (priority below MetaHands)")]
+    public bool useControllersForSpread = false;
 
     [Tooltip("Always allow traditional input as fallback when primary sources aren't moving")]
     public bool enableTraditionalFallback = true;
@@ -84,6 +111,10 @@ public class InputFusionManager : MonoBehaviour
         {
             if (useArmIMUForSpreadHeight && ArmIMUAvailable())
                 return armIMUInput.IsAbsoluteMode;
+            if (useMetaHandsForSpread && MetaHandSpreadAvailable())
+                return handSpreadInput.IsAbsoluteMode;
+            if (useControllersForSpread && controllerSpreadInput != null && controllerSpreadInput.IsAvailable)
+                return controllerSpreadInput.IsAbsoluteMode;
             if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
                 return mediaPipeSpreadInput.IsAbsoluteMode;
             return traditionalInput != null && traditionalInput.IsSpreadAbsolute;
@@ -113,20 +144,15 @@ public class InputFusionManager : MonoBehaviour
             Debug.LogError("InputFusionManager: TraditionalInput reference is missing! Assign it in the Inspector.");
         }
 
-        if (imuMovementSelector == null && useIMUForMovement)
+        if (imuMovementInput == null && useIMUForMovement)
         {
-            Debug.LogWarning("InputFusionManager: IMUMovementSelector is enabled but reference is missing. Falling back to traditional input.");
-            useIMUForMovement = false;
-        }
-        else if (imuMovementSelector != null && imuMovementSelector.ActiveMode == null)
-        {
-            Debug.LogWarning("InputFusionManager: IMUMovementSelector has no active mode. Falling back to traditional input.");
+            Debug.LogWarning("InputFusionManager: IMUMovementInput is enabled but reference is missing. Falling back to traditional input.");
             useIMUForMovement = false;
         }
 
-        if (metaQuestInput == null && useMetaQuestForRotation)
+        if (headsetYawInput == null && useMetaQuestForRotation)
         {
-            Debug.LogWarning("InputFusionManager: MetaQuestInput is enabled but reference is missing. Falling back to traditional input.");
+            Debug.LogWarning("InputFusionManager: HeadsetYawInput is enabled but reference is missing. Falling back to traditional input.");
             useMetaQuestForRotation = false;
         }
 
@@ -146,6 +172,30 @@ public class InputFusionManager : MonoBehaviour
         {
             Debug.LogWarning("InputFusionManager: ArmIMUSpreadHeightInput is enabled but reference is missing. Falling back to MediaPipe/traditional.");
             useArmIMUForSpreadHeight = false;
+        }
+
+        if (handHeightInput == null && useMetaHandsForHeight)
+        {
+            Debug.LogWarning("InputFusionManager: HandHeightInput is enabled but reference is missing. Disabling MetaHands height.");
+            useMetaHandsForHeight = false;
+        }
+
+        if (handSpreadInput == null && useMetaHandsForSpread)
+        {
+            Debug.LogWarning("InputFusionManager: HandSpreadInput is enabled but reference is missing. Disabling MetaHands spread.");
+            useMetaHandsForSpread = false;
+        }
+
+        if (controllerHeightInput == null && useControllersForHeight)
+        {
+            Debug.LogWarning("InputFusionManager: ControllerHeightInput is enabled but reference is missing. Disabling controller height.");
+            useControllersForHeight = false;
+        }
+
+        if (controllerSpreadInput == null && useControllersForSpread)
+        {
+            Debug.LogWarning("InputFusionManager: ControllerSpreadInput is enabled but reference is missing. Disabling controller spread.");
+            useControllersForSpread = false;
         }
     }
 
@@ -199,13 +249,9 @@ public class InputFusionManager : MonoBehaviour
         }
 
         // PRIMARY: Use IMU if enabled and available
-        if (useIMUForMovement && imuMovementSelector != null && imuMovementSelector.ActiveMode != null)
+        if (useIMUForMovement && imuMovementInput != null && imuMovementInput.IsAvailable)
         {
-            IMUMovementInputBase activeMode = imuMovementSelector.ActiveMode;
-            if (activeMode.IsAvailable)
-            {
-                movement = activeMode.MovementVector; // Already has Y=0
-            }
+            movement = imuMovementInput.MovementVector; // Already has Y=0
         }
         // FALLBACK: Use traditional input (horizontal only)
         if (movement == Vector3.zero && traditionalInput != null)
@@ -225,19 +271,29 @@ public class InputFusionManager : MonoBehaviour
     {
         float height = 0f;
 
-        // PRIMARY: Arm IMU forearm sensors (if enabled and available)
+        // PRIMARY: Arm IMU forearm sensors
         if (useArmIMUForSpreadHeight && ArmIMUAvailable())
         {
-            height = driftCorrector != null && driftCorrector.IsAvailable
-                ? driftCorrector.CorrectedHeight
+            height = handIMUFusion != null && handIMUFusion.IsAvailable
+                ? handIMUFusion.HeightControl
                 : armIMUInput.HeightControl;
         }
-        // SECONDARY: MediaPipe webcam tracking
+        // SECONDARY: Meta Quest hand tracking
+        else if (useMetaHandsForHeight && MetaHandHeightAvailable())
+        {
+            height = handHeightInput.HeightControl;
+        }
+        // TERTIARY: Meta Quest Touch controllers
+        else if (useControllersForHeight && controllerHeightInput != null && controllerHeightInput.IsAvailable)
+        {
+            height = controllerHeightInput.HeightControl;
+        }
+        // QUATERNARY: MediaPipe webcam tracking
         else if (useMediaPipeForHeight && mediaPipeHeightInput != null && mediaPipeHeightInput.IsAvailable)
         {
             height = mediaPipeHeightInput.HeightControl;
         }
-        // FALLBACK: traditional input
+        // FALLBACK: traditional input (Taranis)
         else if (traditionalInput != null)
         {
             height = traditionalInput.HeightInput;
@@ -263,19 +319,29 @@ public class InputFusionManager : MonoBehaviour
             return;
         }
 
-        // PRIMARY: Arm IMU forearm sensors (if enabled and available)
+        // PRIMARY: Arm IMU forearm sensors
         if (useArmIMUForSpreadHeight && ArmIMUAvailable())
         {
-            spread = driftCorrector != null && driftCorrector.IsAvailable
-                ? driftCorrector.CorrectedSpread
+            spread = handIMUFusion != null && handIMUFusion.IsAvailable
+                ? handIMUFusion.SpreadControl
                 : armIMUInput.SpreadControl;
         }
-        // SECONDARY: MediaPipe webcam tracking
+        // SECONDARY: Meta Quest hand tracking
+        else if (useMetaHandsForSpread && MetaHandSpreadAvailable())
+        {
+            spread = handSpreadInput.SpreadControl;
+        }
+        // TERTIARY: Meta Quest Touch controllers
+        else if (useControllersForSpread && controllerSpreadInput != null && controllerSpreadInput.IsAvailable)
+        {
+            spread = controllerSpreadInput.SpreadControl;
+        }
+        // QUATERNARY: MediaPipe webcam tracking
         else if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
         {
             spread = mediaPipeSpreadInput.SpreadControl;
         }
-        // FALLBACK: traditional input (rate-based)
+        // FALLBACK: traditional input (Taranis, rate-based)
         else if (traditionalInput != null)
         {
             spread = traditionalInput.SpreadInput;
@@ -301,10 +367,9 @@ public class InputFusionManager : MonoBehaviour
         }
 
         // Check if IMU pitch is actively controlling left/right movement
-        bool pitchIsActive = useIMUForMovement && 
-                           imuMovementSelector != null && 
-                           imuMovementSelector.ActiveMode != null && 
-                           imuMovementSelector.ActiveMode.IsPitchActive;
+        bool pitchIsActive = useIMUForMovement &&
+                           imuMovementInput != null &&
+                           imuMovementInput.IsPitchActive;
 
         // PRIORITY 1: IMU yaw if enabled and available
         if (useIMUForRotation && imuYawInput != null && imuYawInput.IsAvailable)
@@ -313,9 +378,9 @@ public class InputFusionManager : MonoBehaviour
         }
         // PRIORITY 2: Meta Quest headset yaw if enabled and available
         // BUT: Disable if pitch is actively moving the swarm left/right (prevents conflicting inputs)
-        else if (useMetaQuestForRotation && metaQuestInput != null && !pitchIsActive)
+        else if (useMetaQuestForRotation && headsetYawInput != null && !pitchIsActive)
         {
-            rotation = metaQuestInput.HeadsetYawRate;
+            rotation = headsetYawInput.RotationControl;
         }
         // FALLBACK: Use traditional input (right stick / controller)
         else if (traditionalInput != null)
@@ -349,6 +414,10 @@ public class InputFusionManager : MonoBehaviour
 
     bool ArmIMUAvailable() => armIMUInput != null && armIMUInput.IsAvailable;
 
+    bool MetaHandHeightAvailable() => handHeightInput != null && handHeightInput.IsAvailable;
+
+    bool MetaHandSpreadAvailable() => handSpreadInput != null && handSpreadInput.IsAvailable;
+
     /// <summary>
     /// Returns true if any movement input is active (from any source)
     /// </summary>
@@ -381,16 +450,16 @@ public class InputFusionManager : MonoBehaviour
         Debug.Log("=== PERFORMING CALIBRATION ===");
 
         // Calibrate IMU movement (all modes)
-        if (imuMovementSelector != null && imuMovementSelector.ActiveMode != null)
+        if (imuMovementInput != null && imuMovementInput.IsAvailable)
         {
-            imuMovementSelector.ActiveMode.CalibrateNeutral();
+            imuMovementInput.CalibrateNeutral();
             Debug.Log("✓ IMU movement calibrated");
         }
 
         // Calibrate Meta Quest headset yaw
-        if (metaQuestInput != null && metaQuestInput.IsHeadsetAvailable())
+        if (headsetYawInput != null && headsetYawInput.IsAvailable)
         {
-            metaQuestInput.CalibrateNeutral();
+            headsetYawInput.CalibrateNeutral();
             Debug.Log("✓ Meta Quest headset yaw calibrated");
         }
 
@@ -401,17 +470,41 @@ public class InputFusionManager : MonoBehaviour
             Debug.Log("✓ IMU yaw calibrated");
         }
 
-        // Calibrate arm IMU spread/height — go through DriftCorrector when present
-        // so that ZUPT state is also reset (bypassing it leaves the corrector locked)
-        if (driftCorrector != null && driftCorrector.IsAvailable)
+        // Calibrate arm IMU spread/height — route through HandIMUFusion when present
+        // (it just forwards to armIMU, but keeps the call site uniform with the read path)
+        if (handIMUFusion != null && handIMUFusion.IsAvailable)
         {
-            driftCorrector.CalibrateNeutral();
-            Debug.Log("✓ Arm IMU spread/height calibrated (via DriftCorrector)");
+            handIMUFusion.CalibrateNeutral();
+            Debug.Log("✓ Arm IMU spread/height calibrated (via HandIMUFusion)");
         }
         else if (armIMUInput != null && armIMUInput.IsAvailable)
         {
             armIMUInput.CalibrateNeutral();
             Debug.Log("✓ Arm IMU spread/height calibrated");
+        }
+
+        // Calibrate Meta Quest hand height/spread
+        if (handHeightInput != null && handHeightInput.IsAvailable)
+        {
+            handHeightInput.CalibrateNeutral();
+            Debug.Log("✓ Meta hand height calibrated");
+        }
+        if (handSpreadInput != null && handSpreadInput.IsAvailable)
+        {
+            handSpreadInput.CalibrateNeutral();
+            Debug.Log("✓ Meta hand spread calibrated");
+        }
+
+        // Calibrate Meta Quest Touch controller height/spread
+        if (controllerHeightInput != null && controllerHeightInput.IsAvailable)
+        {
+            controllerHeightInput.CalibrateNeutral();
+            Debug.Log("✓ Controller height calibrated");
+        }
+        if (controllerSpreadInput != null && controllerSpreadInput.IsAvailable)
+        {
+            controllerSpreadInput.CalibrateNeutral();
+            Debug.Log("✓ Controller spread calibrated");
         }
 
         Debug.Log("=== CALIBRATION COMPLETE ===");
@@ -439,6 +532,8 @@ public class InputFusionManager : MonoBehaviour
         GUILayout.Label($"Spread: {SwarmSpread:F2}  Height: {SwarmMovement.y:F2}");
         GUILayout.Label($"Camera Rotation OUTPUT: {CameraRotation:F2}");
         GUILayout.Label($"ArmIMU: {(useArmIMUForSpreadHeight ? (ArmIMUAvailable() ? "<color=lime>ON</color>" : "<color=red>MISSING</color>") : "off")}");
+        GUILayout.Label($"MetaHands H/S: {(useMetaHandsForHeight ? (MetaHandHeightAvailable() ? "<color=lime>H-ON</color>" : "<color=red>H-MISS</color>") : "h-off")} / {(useMetaHandsForSpread ? (MetaHandSpreadAvailable() ? "<color=lime>S-ON</color>" : "<color=red>S-MISS</color>") : "s-off")}");
+        GUILayout.Label($"Controllers H/S: {(useControllersForHeight ? (controllerHeightInput != null && controllerHeightInput.IsAvailable ? "<color=lime>H-ON</color>" : "<color=red>H-MISS</color>") : "h-off")} / {(useControllersForSpread ? (controllerSpreadInput != null && controllerSpreadInput.IsAvailable ? "<color=lime>S-ON</color>" : "<color=red>S-MISS</color>") : "s-off")}");
        // GUILayout.Label($"---");
        // GUILayout.Label($"IMU Movement Active: {useIMUForMovement}");
        // GUILayout.Label($"<color=cyan>MetaQuest Rotation Active: {useMetaQuestForRotation}</color>");
@@ -448,15 +543,14 @@ public class InputFusionManager : MonoBehaviour
         //GUILayout.Label($"Traditional Fallback: {enableTraditionalFallback}");
         
         // Show pitch active status (left/right movement)
-        bool pitchActive = useIMUForMovement && 
-                         imuMovementSelector != null && 
-                         imuMovementSelector.ActiveMode != null && 
-                         imuMovementSelector.ActiveMode.IsPitchActive;
+        bool pitchActive = useIMUForMovement &&
+                         imuMovementInput != null &&
+                         imuMovementInput.IsPitchActive;
         //GUILayout.Label($"<color=orange>Pitch Active (Yaw Locked): {pitchActive}</color>");
         
-        if (useMetaQuestForRotation && metaQuestInput != null)
+        if (useMetaQuestForRotation && headsetYawInput != null)
         {
-            //GUILayout.Label($"<color=lime>MetaQuest Yaw Rate: {metaQuestInput.HeadsetYawRate:F2}</color>");
+            //GUILayout.Label($"<color=lime>Headset Yaw Rate: {headsetYawInput.RotationControl:F2}</color>");
         }
         GUILayout.EndArea();
     }
