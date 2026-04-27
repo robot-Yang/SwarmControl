@@ -6,6 +6,8 @@ using System.Collections.Generic;
 
 public class DroneNetworkManager : MonoBehaviour
 {
+    private const float DefaultNetworkRefreshRate = 0.5f;
+
     public LayerMask obstacleMask;
 
     public List<GameObject> drones
@@ -81,7 +83,7 @@ public class DroneNetworkManager : MonoBehaviour
         FindLargestComponentDistance();
         GetDronesScores(out droneScores);
         TimerStart();
-        yield return new WaitForSeconds(GlobalConstants.NETWORK_REFRESH_RATE);
+        yield return new WaitForSeconds(DefaultNetworkRefreshRate);
         StartCoroutine(updateNetwork());
     }
 
