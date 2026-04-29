@@ -26,8 +26,17 @@ public class MigrationPointController : MonoBehaviour
     public static Vector3 alignementVectorNonZero = new Vector3(0, 0, 0);
 
     [Header("Spread Control")]
+    // Static defaults retained as fallback for any pre-existing static-access call sites,
+    // but live bounds are now read from the runtime instance fields below (driven by InputFusionManager).
     public static float maxSpreadness = 5f;
     public static float minSpreadness = 1f;
+
+    [Tooltip("Runtime upper bound on separation distance — pushed each frame from InputFusionManager.maxSeparationDistance")]
+    public float maxSpreadnessRuntime = 5f;
+
+    [Tooltip("Runtime lower bound on separation distance — pushed each frame from InputFusionManager.minSeparationDistance")]
+    public float minSpreadnessRuntime = 1f;
+
     [Tooltip("Speed multiplier for rate-based spread control (keyboard/controller)")]
     [Range(0.1f, 5.0f)]
     public float spreadSpeed = 1.3f;
@@ -627,7 +636,7 @@ public class MigrationPointController : MonoBehaviour
             // Absolute/Hybrid mode: spreadValue is the target separation distance
             // Set it directly (Hybrid mode already smoothed in InputFusionManager)
             swarmModel.desiredSeparation = spreadValue;
-            swarmModel.desiredSeparation = Mathf.Clamp(swarmModel.desiredSeparation, minSpreadness, maxSpreadness);
+            swarmModel.desiredSeparation = Mathf.Clamp(swarmModel.desiredSeparation, minSpreadnessRuntime, maxSpreadnessRuntime);
         }
         else
         {
@@ -636,7 +645,7 @@ public class MigrationPointController : MonoBehaviour
             if(spreadValue != 0)
             {
                 swarmModel.desiredSeparation += spreadValue * Time.deltaTime * spreadSpeed;
-                swarmModel.desiredSeparation = Mathf.Clamp(swarmModel.desiredSeparation, minSpreadness, maxSpreadness);
+                swarmModel.desiredSeparation = Mathf.Clamp(swarmModel.desiredSeparation, minSpreadnessRuntime, maxSpreadnessRuntime);
             }
         }
     }

@@ -88,6 +88,60 @@ public class InputFusionManager : MonoBehaviour
     public bool enableTraditionalFallback = true;
 
     // ============================================
+    // PER-AXIS MAX SPEEDS (absolute, applied to rate-based inputs)
+    // Each value is the migration-vector / rate magnitude produced when the
+    // corresponding input axis is at full ±1. Downstream MigrationPointController
+    // multiplies by `radius` (default 1) and swarmModel clamps drone velocity at
+    // `maxSpeed`. Keep `radius = 1` for these values to read literally.
+    // ============================================
+    [Header("Per-Axis Max Speeds (at full ±1 input)")]
+    [Tooltip("Forward (positive Z) max migration speed at full input")]
+    [Range(0f, 5f)]
+    public float forwardMaxSpeed = 1f;
+
+    [Tooltip("Backward (negative Z) max migration speed at full input")]
+    [Range(0f, 5f)]
+    public float backwardMaxSpeed = 1f;
+
+    [Tooltip("Lateral (left/right, X axis) max migration speed at full input")]
+    [Range(0f, 5f)]
+    public float lateralMaxSpeed = 1f;
+
+    [Tooltip("Height (Y axis, up and down) max migration speed at full input")]
+    [Range(0f, 5f)]
+    public float heightMaxSpeed = 1f;
+
+    [Tooltip("Camera rotation max yaw rate at full input (compounded with CameraMovement.rotationSpeed)")]
+    [Range(0f, 5f)]
+    public float cameraRotationMaxSpeed = 1f;
+
+    [Tooltip("Spread max rate at full input — m/s of separation change (rate-based modes only)")]
+    [Range(0f, 5f)]
+    public float spreadMaxSpeed = 1f;
+
+    // ============================================
+    // SWARM SPEED + SEPARATION BOUNDS (forwarded into MigrationPointController / swarmModel)
+    // ============================================
+    [Header("Swarm Speed & Spread Bounds")]
+    [Tooltip("Hard cap on drone velocity (m/s). Mirrors swarmModel.maxSpeed — set at runtime in Start().")]
+    [Range(0.5f, 20f)]
+    public float swarmMaxSpeed = 5f;
+
+    [Tooltip("Reference to MigrationPointController — auto-found if left empty. Used to push spread bounds.")]
+    public MigrationPointController migrationPointController;
+
+    [Tooltip("Reference to swarmModel — auto-found if left empty. Used to push swarmMaxSpeed.")]
+    public swarmModel swarmModelRef;
+
+    [Tooltip("Minimum allowed separation distance (m) — clamps lower bound on spread")]
+    [Range(0.1f, 5f)]
+    public float minSeparationDistance = 1f;
+
+    [Tooltip("Maximum allowed separation distance (m) — clamps upper bound on spread")]
+    [Range(1f, 20f)]
+    public float maxSeparationDistance = 5f;
+
+    // ============================================
     // CALIBRATION STATE
     // ============================================
     private bool isCalibrating = false;
@@ -135,6 +189,28 @@ public class InputFusionManager : MonoBehaviour
     void Start()
     {
         ValidateReferences();
+        ResolveSwarmReferences();
+        ApplySwarmBounds();
+    }
+
+    void ResolveSwarmReferences()
+    {
+        if (migrationPointController == null) migrationPointController = FindObjectOfType<MigrationPointController>();
+        if (swarmModelRef == null) swarmModelRef = FindObjectOfType<swarmModel>();
+    }
+
+    /// <summary>
+    /// Pushes swarmMaxSpeed and min/max separation bounds into the actual swarm components.
+    /// Called every frame so Inspector tweaks take effect live.
+    /// </summary>
+    void ApplySwarmBounds()
+    {
+        if (swarmModelRef != null) swarmModelRef.maxSpeed = swarmMaxSpeed;
+        if (migrationPointController != null)
+        {
+            migrationPointController.minSpreadnessRuntime = minSeparationDistance;
+            migrationPointController.maxSpreadnessRuntime = maxSeparationDistance;
+        }
     }
 
     void ValidateReferences()
@@ -204,6 +280,7 @@ public class InputFusionManager : MonoBehaviour
     // ============================================
     void Update()
     {
+        ApplySwarmBounds();
         FuseMovementInputs();
         FuseHeightInputs();
         FuseSpreadInputs();
@@ -215,8 +292,8 @@ public class InputFusionManager : MonoBehaviour
         if (CalibratePressed && !isCalibrating)
         {
             isCalibrating = true;
-            calibrationCountdown = 3f;
-            Debug.Log("Calibration in 3 seconds — hold steady!");
+            calibrationCountdown = 2f;
+            Debug.Log("Calibration in 2 seconds — hold steady!");
         }
 
         // Tick countdown and fire when it reaches zero
@@ -260,6 +337,9 @@ public class InputFusionManager : MonoBehaviour
             movement = new Vector3(moveInput.x, 0f, moveInput.y); // Y is handled in FuseHeightInputs
         }
 
+        movement.x *= lateralMaxSpeed;
+        movement.z *= movement.z >= 0f ? forwardMaxSpeed : backwardMaxSpeed;
+
         SwarmMovement = movement;
     }
 
@@ -298,6 +378,8 @@ public class InputFusionManager : MonoBehaviour
         {
             height = traditionalInput.HeightInput;
         }
+
+        height *= heightMaxSpeed;
 
         SwarmMovement = new Vector3(SwarmMovement.x, height, SwarmMovement.z);
     }
@@ -347,6 +429,10 @@ public class InputFusionManager : MonoBehaviour
             spread = traditionalInput.SpreadInput;
         }
 
+        // Per-axis max speed only meaningful for rate-based spread; absolute (target distance)
+        // sources should pass through unchanged.
+        if (!IsSpreadAbsolute) spread *= spreadMaxSpeed;
+
         SwarmSpread = spread;
     }
 
@@ -387,6 +473,8 @@ public class InputFusionManager : MonoBehaviour
         {
             rotation = traditionalInput.RotationInput;
         }
+
+        rotation *= cameraRotationMaxSpeed;
 
         CameraRotation = rotation;
     }

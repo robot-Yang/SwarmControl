@@ -1988,18 +1988,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   isLoading: 0
   scenes: []
-  ObstacleFPV: FPVObs
-<<<<<<< HEAD
-  ObstacleFPV1: FPVObs_1
-  ObstacleTPV: TDVObs
-  ObstacleTPV1: TDVObs_1
-  CollectibleFPV: FPVCollectibles
-  CollectibleFPV1: FPVCollectibles_1
-  CollectibleTPV: TDVCollectibles
-  CollectibleTPV1: TDVCollectibles_1
-=======
+  ObstacleFPV: Pablo
   ObstacleFPV2: Main
->>>>>>> 8125a7c45bd05353da8567213daaeaa568579a41
   assetPathTraining: Assets/Scenes/TrainingFinal
   hapticsEnabled: 1
   autoLoadOnStart: 1
