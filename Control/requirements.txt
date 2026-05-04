@@ -1,5 +1,11 @@
+# Core (always required)
 opencv-python>=4.8.0
-mediapipe>=0.10.0
 numpy>=1.24.0
 websockets>=12.0
 scikit-learn>=1.3.0
+pygame>=2.5.0
+
+# Pick at least one backend:
+mediapipe>=0.10.0          # MediaPipe Hands backend
+rtmlib>=0.0.13             # RTMPose backend (also needs onnxruntime below)
+onnxruntime>=1.17.0        # CPU runtime for rtmlib; swap for onnxruntime-gpu if you have CUDA
