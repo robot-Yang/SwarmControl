@@ -162,6 +162,9 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     // --- Collectibles tracking ---
     private static int _collectiblesCounter = 0;
 
+    // --- Crash event buffer ---
+    private readonly List<CrashEvent> _crashBuffer = new List<CrashEvent>();
+
 
     // -------------------- Data types --------------------
     [Serializable]
@@ -180,6 +183,23 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         public int id;
         public string name;
         public List<TrajFrame> frames = new List<TrajFrame>(4096);
+    }
+
+
+    /// <summary>
+    /// One crash event. Captured at the moment DroneController.crash() fires,
+    /// before the drone is removed from the swarm so the position is still valid.
+    /// `embodied` lets you separate "the participant's drone crashed" from
+    /// "a peripheral swarm drone crashed" without joining against `embodiedId`.
+    /// </summary>
+    [Serializable]
+    public struct CrashEvent
+    {
+        public float t;            // Time.time at crash
+        public float x, y, z;      // world position of the drone at crash
+        public int droneId;        // matches DroneTraj.id
+        public string droneName;
+        public byte embodied;      // 1 if this drone was the embodied one at crash time
     }
 
 
@@ -213,6 +233,10 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         // --- Collectibles and elapsed time ---
         public int collectiblesPickedUp;  // total collectibles collected during run
         public float elapsedTime;         // time between start and end collider (seconds)
+
+        // --- Crashes ---
+        public int crashCount;                  // total crashes during the run (== crashes.Count)
+        public List<CrashEvent> crashes = new List<CrashEvent>();
     }
 
 
@@ -396,6 +420,41 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 #endif
     }
 
+    /// <summary>
+    /// Record a crash event. Call from DroneController.crash() *before* the drone
+    /// is removed from the swarm — we still need its position. Events outside an
+    /// open Run window are ignored so analysis aligns with the trial timing.
+    /// </summary>
+    public static void RecordCrash(GameObject drone)
+    {
+        if (_instance == null || drone == null) return;
+        _instance.RecordCrashInternal(drone.transform);
+    }
+
+    private void RecordCrashInternal(Transform tr)
+    {
+        // Only count crashes within an active run, matching the existing
+        // collectibles convention (counter resets on MarkTrialStart).
+        if (_openTrial == null || _openTrial.label != runLabelName) return;
+
+        int id = GetStableId(tr);
+        Vector3 p = tr.position;
+        bool wasEmbodied = (id == _embodiedStableId);
+
+        _crashBuffer.Add(new CrashEvent
+        {
+            t = Time.time,
+            x = p.x, y = p.y, z = p.z,
+            droneId = id,
+            droneName = tr.name,
+            embodied = (byte)(wasEmbodied ? 1 : 0),
+        });
+
+#if UNITY_EDITOR
+        Debug.Log($"[SwarmTrajectoryRecorder] Crash #{_crashBuffer.Count} at t={Time.time:F2} pos={p} embodied={wasEmbodied}");
+#endif
+    }
+
 
     // STRICT single-run policy: ignore duplicate starts, ignore stop when no run is open.
     private void MarkTrialStartInternal(string label)
@@ -427,9 +486,12 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
             endGameTime = 0f,
             endRealtime = 0f
         };
-        
+
         // Reset collectibles counter for new run
         _collectiblesCounter = 0;
+
+        // Reset crash buffer for new run
+        _crashBuffer.Clear();
         
 #if UNITY_EDITOR
         Debug.Log($"[SwarmTrajectoryRecorder] Trial START '{_openTrial.label}' at t={_openTrial.startGameTime:F2}s");
@@ -505,6 +567,7 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         _finalized = false; // allow a final save for the new scene
         _runFinalized = false; // new file can have its own single run
 
+        _crashBuffer.Clear();
 
         _embodiedTransform = null;
         _embodiedStableId = int.MinValue;
@@ -1042,10 +1105,14 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
             // NEW: embodied metadata
             embodiedId = _embodiedStableId,
             embodiedName = _embodiedTransform ? _embodiedTransform.name : string.Empty,
-            
+
             // Collectibles and elapsed time
             collectiblesPickedUp = _collectiblesCounter,
-            elapsedTime = elapsedTime
+            elapsedTime = elapsedTime,
+
+            // Crashes — full event list, plus aggregate count for quick scanning
+            crashCount = _crashBuffer.Count,
+            crashes = new List<CrashEvent>(_crashBuffer),
         };
 
 

@@ -25,11 +25,16 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("IMU yaw input for camera rotation from OpenZen sensor")]
     public IMUYawInput imuYawInput;
 
-    [Tooltip("MediaPipe spread input from Python webcam tracking")]
-    public MediaPipeSpreadInput mediaPipeSpreadInput;
+    [Tooltip("Pose-tracking spread input from Python webcam tracking (MediaPipe or RTMPose)")]
+    [FormerlySerializedAs("mediaPipeSpreadInput")]
+    public PoseSpreadInput poseSpreadInput;
 
-    [Tooltip("MediaPipe height input from Python webcam tracking")]
-    public MediaPipeHeightInput mediaPipeHeightInput;
+    [Tooltip("Pose-tracking height input from Python webcam tracking (MediaPipe or RTMPose)")]
+    [FormerlySerializedAs("mediaPipeHeightInput")]
+    public PoseHeightInput poseHeightInput;
+
+    [Tooltip("Pose-tracking head-yaw input — non-VR camera rotation fallback (RTMPose Wholebody only)")]
+    public PoseYawInput poseYawInput;
 
     [Tooltip("Arm IMU input — forearm sensors for spread and height (primary wearable source)")]
     public ArmIMUSpreadHeightInput armIMUInput;
@@ -50,6 +55,9 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Meta Quest Touch controllers — rate-based spread")]
     public ControllerSpreadInput controllerSpreadInput;
 
+    [Tooltip("6-step Meta Quest calibration flow (V key by default). Auto-found if left empty.")]
+    public MetaQuestCalibrationFlow metaQuestCalibration;
+
     // ============================================
     // INPUT PRIORITY TOGGLES
     // ============================================
@@ -63,13 +71,18 @@ public class InputFusionManager : MonoBehaviour
     [Tooltip("Use IMU yaw for camera rotation (if false, falls back to MetaQuest or traditional)")]
     public bool useIMUForRotation = false;
 
-    [Tooltip("Use MediaPipe webcam tracking for spread control (if false, uses traditional input)")]
-    public bool useMediaPipeForSpread = false;
+    [Tooltip("Use webcam pose tracking for spread control (if false, uses traditional input)")]
+    [FormerlySerializedAs("useMediaPipeForSpread")]
+    public bool usePoseForSpread = false;
 
-    [Tooltip("Use MediaPipe webcam tracking for height control (if false, uses traditional input)")]
-    public bool useMediaPipeForHeight = false;
+    [Tooltip("Use webcam pose tracking for height control (if false, uses traditional input)")]
+    [FormerlySerializedAs("useMediaPipeForHeight")]
+    public bool usePoseForHeight = false;
 
-    [Tooltip("Use forearm IMUs for spread and height (takes priority over MediaPipe when enabled)")]
+    [Tooltip("Use webcam pose tracking for camera rotation (non-VR fallback for participants without a headset)")]
+    public bool usePoseForRotation = false;
+
+    [Tooltip("Use forearm IMUs for spread and height (takes priority over pose tracking when enabled)")]
     public bool useArmIMUForSpreadHeight = false;
 
     [Tooltip("Use Meta Quest hand tracking for height (priority below ArmIMU)")]
@@ -169,8 +182,8 @@ public class InputFusionManager : MonoBehaviour
                 return handSpreadInput.IsAbsoluteMode;
             if (useControllersForSpread && controllerSpreadInput != null && controllerSpreadInput.IsAvailable)
                 return controllerSpreadInput.IsAbsoluteMode;
-            if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
-                return mediaPipeSpreadInput.IsAbsoluteMode;
+            if (usePoseForSpread && poseSpreadInput != null && poseSpreadInput.IsAvailable)
+                return poseSpreadInput.IsAbsoluteMode;
             return traditionalInput != null && traditionalInput.IsSpreadAbsolute;
         }
     }
@@ -197,7 +210,15 @@ public class InputFusionManager : MonoBehaviour
     {
         if (migrationPointController == null) migrationPointController = FindObjectOfType<MigrationPointController>();
         if (swarmModelRef == null) swarmModelRef = FindObjectOfType<swarmModel>();
+        if (metaQuestCalibration == null) metaQuestCalibration = FindObjectOfType<MetaQuestCalibrationFlow>();
     }
+
+    /// <summary>
+    /// True when any calibration is in progress: either the legacy 2-second neutral-capture
+    /// or the V-key Meta Quest 6-step flow. Used to hold the swarm steady mid-capture.
+    /// </summary>
+    private bool IsAnyCalibrationActive =>
+        isCalibrating || (metaQuestCalibration != null && metaQuestCalibration.IsRunning);
 
     /// <summary>
     /// Pushes swarmMaxSpeed and min/max separation bounds into the actual swarm components.
@@ -232,21 +253,27 @@ public class InputFusionManager : MonoBehaviour
             useMetaQuestForRotation = false;
         }
 
-        if (mediaPipeSpreadInput == null && useMediaPipeForSpread)
+        if (poseSpreadInput == null && usePoseForSpread)
         {
-            Debug.LogWarning("InputFusionManager: MediaPipeSpreadInput is enabled but reference is missing. Falling back to traditional input.");
-            useMediaPipeForSpread = false;
+            Debug.LogWarning("InputFusionManager: PoseSpreadInput is enabled but reference is missing. Falling back to traditional input.");
+            usePoseForSpread = false;
         }
 
-        if (mediaPipeHeightInput == null && useMediaPipeForHeight)
+        if (poseYawInput == null && usePoseForRotation)
         {
-            Debug.LogWarning("InputFusionManager: MediaPipeHeightInput is enabled but reference is missing. Falling back to traditional input.");
-            useMediaPipeForHeight = false;
+            Debug.LogWarning("InputFusionManager: PoseYawInput is enabled but reference is missing. Falling back to MetaQuest/traditional rotation.");
+            usePoseForRotation = false;
+        }
+
+        if (poseHeightInput == null && usePoseForHeight)
+        {
+            Debug.LogWarning("InputFusionManager: PoseHeightInput is enabled but reference is missing. Falling back to traditional input.");
+            usePoseForHeight = false;
         }
 
         if (armIMUInput == null && useArmIMUForSpreadHeight)
         {
-            Debug.LogWarning("InputFusionManager: ArmIMUSpreadHeightInput is enabled but reference is missing. Falling back to MediaPipe/traditional.");
+            Debug.LogWarning("InputFusionManager: ArmIMUSpreadHeightInput is enabled but reference is missing. Falling back to pose tracking/traditional.");
             useArmIMUForSpreadHeight = false;
         }
 
@@ -318,7 +345,7 @@ public class InputFusionManager : MonoBehaviour
         Vector3 movement = Vector3.zero;
 
         // STABILIZE during calibration - provide minimal forward velocity to maintain swarm cohesion
-        if (isCalibrating)
+        if (IsAnyCalibrationActive)
         {
             // Small forward velocity prevents alignmentVector from becoming zero (which causes disconnection)
             SwarmMovement = new Vector3(0f, 0f, 0.05f); // Gentle forward drift maintains formation
@@ -344,7 +371,7 @@ public class InputFusionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Combines height control from MediaPipe and/or traditional input
+    /// Combines height control from pose tracking and/or traditional input
     /// Updates the Y component of SwarmMovement
     /// </summary>
     void FuseHeightInputs()
@@ -368,10 +395,10 @@ public class InputFusionManager : MonoBehaviour
         {
             height = controllerHeightInput.HeightControl;
         }
-        // QUATERNARY: MediaPipe webcam tracking
-        else if (useMediaPipeForHeight && mediaPipeHeightInput != null && mediaPipeHeightInput.IsAvailable)
+        // QUATERNARY: webcam pose tracking (MediaPipe or RTMPose)
+        else if (usePoseForHeight && poseHeightInput != null && poseHeightInput.IsAvailable)
         {
-            height = mediaPipeHeightInput.HeightControl;
+            height = poseHeightInput.HeightControl;
         }
         // FALLBACK: traditional input (Taranis)
         else if (traditionalInput != null)
@@ -385,17 +412,17 @@ public class InputFusionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// Combines spread control from MediaPipe and/or traditional input
+    /// Combines spread control from pose tracking and/or traditional input
     /// Note: Output meaning depends on mode:
     /// - Traditional: SwarmSpread is a rate (-1 to +1)
-    /// - MediaPipe: SwarmSpread is target separation distance (meters)
+    /// - Pose tracking: SwarmSpread is target separation distance (meters)
     /// </summary>
     void FuseSpreadInputs()
     {
         float spread = 0f;
 
         // FREEZE SPREAD during calibration - no spreading/shrinking
-        if (isCalibrating)
+        if (IsAnyCalibrationActive)
         {
             SwarmSpread = 0f; // Zero spread change during calibration
             return;
@@ -418,10 +445,10 @@ public class InputFusionManager : MonoBehaviour
         {
             spread = controllerSpreadInput.SpreadControl;
         }
-        // QUATERNARY: MediaPipe webcam tracking
-        else if (useMediaPipeForSpread && mediaPipeSpreadInput != null && mediaPipeSpreadInput.IsAvailable)
+        // QUATERNARY: webcam pose tracking (MediaPipe or RTMPose)
+        else if (usePoseForSpread && poseSpreadInput != null && poseSpreadInput.IsAvailable)
         {
-            spread = mediaPipeSpreadInput.SpreadControl;
+            spread = poseSpreadInput.SpreadControl;
         }
         // FALLBACK: traditional input (Taranis, rate-based)
         else if (traditionalInput != null)
@@ -446,7 +473,7 @@ public class InputFusionManager : MonoBehaviour
         float rotation = 0f;
 
         // STOP rotation during calibration (but allow swarm to hover)
-        if (isCalibrating)
+        if (IsAnyCalibrationActive)
         {
             CameraRotation = 0f;
             return;
@@ -467,6 +494,11 @@ public class InputFusionManager : MonoBehaviour
         else if (useMetaQuestForRotation && headsetYawInput != null && !pitchIsActive)
         {
             rotation = headsetYawInput.RotationControl;
+        }
+        // PRIORITY 3: Webcam pose yaw — for non-VR participants who can't wear the headset
+        else if (usePoseForRotation && poseYawInput != null && poseYawInput.IsAvailable)
+        {
+            rotation = poseYawInput.YawRate;
         }
         // FALLBACK: Use traditional input (right stick / controller)
         else if (traditionalInput != null)
@@ -626,8 +658,8 @@ public class InputFusionManager : MonoBehaviour
        // GUILayout.Label($"IMU Movement Active: {useIMUForMovement}");
        // GUILayout.Label($"<color=cyan>MetaQuest Rotation Active: {useMetaQuestForRotation}</color>");
         //GUILayout.Label($"IMU Rotation Active: {useIMUForRotation}");
-       // GUILayout.Label($"MediaPipe Spread Active: {useMediaPipeForSpread}");
-        //GUILayout.Label($"MediaPipe Height Active: {useMediaPipeForHeight}");
+       // GUILayout.Label($"Pose Spread Active: {usePoseForSpread}");
+        //GUILayout.Label($"Pose Height Active: {usePoseForHeight}");
         //GUILayout.Label($"Traditional Fallback: {enableTraditionalFallback}");
         
         // Show pitch active status (left/right movement)

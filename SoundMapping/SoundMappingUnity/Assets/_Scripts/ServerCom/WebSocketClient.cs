@@ -9,6 +9,7 @@ public class WebSocketClient : MonoBehaviour
     // Public properties for other scripts to access
     public float HandDistance { get; private set; } = 0f;
     public float HandHeight { get; private set; } = 0f;
+    public float HeadYawDeg { get; private set; } = 0f;
     public bool IsConnected => ws != null && ws.IsAlive;
 
     void Start()
@@ -18,7 +19,7 @@ public class WebSocketClient : MonoBehaviour
 
         ws.OnOpen += (sender, e) =>
         {
-            UpdateStatus("Connected to MediaPipe Python server.");
+            UpdateStatus("Connected to pose-tracking Python server.");
         };
 
         ws.OnMessage += (sender, e) =>
@@ -45,16 +46,17 @@ public class WebSocketClient : MonoBehaviour
     {
         try
         {
-            MediaPipeHandData data = JsonUtility.FromJson<MediaPipeHandData>(jsonData);
+            PoseTrackingData data = JsonUtility.FromJson<PoseTrackingData>(jsonData);
             HandDistance = data.distance;
             HandHeight = data.height;
-            
+            HeadYawDeg = data.yaw;
+
             // Debug logging enabled
             // Debug.Log($"Received - Distance: {HandDistance:F2}, Height: {HandHeight:F2}");
         }
         catch (System.Exception ex)
         {
-            Debug.LogWarning($"Failed to parse MediaPipe data: {ex.Message}");
+            Debug.LogWarning($"Failed to parse pose-tracking data: {ex.Message}");
             Debug.LogWarning($"Raw JSON: {jsonData}");
         }
     }

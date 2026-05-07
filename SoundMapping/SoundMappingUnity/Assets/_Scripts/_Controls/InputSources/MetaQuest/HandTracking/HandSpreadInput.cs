@@ -1,14 +1,14 @@
 using UnityEngine;
 
 /// <summary>
-/// Rate-based spread control via Meta Quest hand tracking.
-/// Distance between left/right hands vs a calibrated neutral distance produces
-/// a rate (-1..+1) for swarm spread.
-/// Hands closer than neutral = contract (negative). Hands farther = expand (positive).
+/// Spread control via Meta Quest hand tracking, in either rate or absolute mode.
+/// Distance between left/right hands is mapped using captured min/neutral/max bounds
+/// (set by the V-key calibration flow):
+///   • Rate mode    → -1..+1 (closer than neutral = contract, farther = expand)
+///   • Absolute mode → target swarm separation in meters
 ///
 /// Sibling of ControllerSpreadInput. Reads OVRHand components and gates on both
-/// hands tracked with (optional) high confidence — naturally exclusive with
-/// controller input at the hardware level.
+/// hands tracked with (optional) high confidence.
 /// </summary>
 public class HandSpreadInput : MonoBehaviour
 {
@@ -19,19 +19,36 @@ public class HandSpreadInput : MonoBehaviour
     [Tooltip("Right hand from OVRCameraRig (OVRHand component)")]
     public OVRHand rightHand;
 
-    [Header("Distance Range (meters)")]
-    [Tooltip("Neutral hand distance — overwritten by CalibrateNeutral()")]
-    public float neutralDistance = 0.35f;
+    [Header("Output Mode")]
+    [Tooltip("Rate (-1..+1) or Absolute (target meters). Switchable per-trial.")]
+    public SpreadMode mode = SpreadMode.Rate;
 
-    [Tooltip("Distance for full -1 (contracting) rate")]
-    [Range(0.05f, 0.4f)]
+    [Header("Calibrated Bounds (meters between hands)")]
+    [Tooltip("Inter-hand distance at MIN spread. Set by calibration.")]
     public float minDistance = 0.1f;
 
-    [Tooltip("Distance for full +1 (expanding) rate")]
-    [Range(0.4f, 1.5f)]
+    [Tooltip("Inter-hand distance at NEUTRAL (rate-mode deadzone center). Set by calibration.")]
+    public float neutralDistance = 0.35f;
+
+    [Tooltip("Inter-hand distance at MAX spread. Set by calibration.")]
     public float maxDistance = 0.8f;
 
-    [Header("Deadzone")]
+    [Header("Absolute Mode — Target Range (meters between drones)")]
+    [Tooltip("Swarm separation when distance == minDistance.")]
+    public float minSwarmSeparation = 1.0f;
+
+    [Tooltip("Swarm separation when distance == maxDistance.")]
+    public float maxSwarmSeparation = 10.0f;
+
+    [Header("Response (rate mode only)")]
+    [Tooltip("Linear or exponential mapping from delta-from-neutral to rate.")]
+    public ResponseCurve responseCurve = ResponseCurve.Linear;
+
+    [Tooltip("Exponent used when responseCurve == Exponential.")]
+    [Range(1f, 3f)]
+    public float curveExponent = 2.0f;
+
+    [Header("Deadzone (rate mode only)")]
     [Tooltip("Half-width of the no-change band around neutral (meters)")]
     [Range(0f, 0.2f)]
     public float deadzone = 0.1f;
@@ -41,12 +58,12 @@ public class HandSpreadInput : MonoBehaviour
     public bool requireHighConfidence = true;
 
     [Header("Smoothing")]
-    [Tooltip("SmoothDamp time on rate output. 0 = no smoothing.")]
+    [Tooltip("SmoothDamp time on output. 0 = no smoothing.")]
     [Range(0f, 0.5f)]
     public float smoothTime = 0.1f;
 
     [Header("Local Test Calibration")]
-    [Tooltip("Optional standalone calibrate key — official flow is via InputFusionManager.PerformCalibration()")]
+    [Tooltip("Optional standalone re-center key — official flow is V (multi-step).")]
     public KeyCode calibrateKey = KeyCode.G;
 
     [Header("Debug")]
@@ -56,11 +73,15 @@ public class HandSpreadInput : MonoBehaviour
     // PUBLIC OUTPUTS (read by InputFusionManager)
     // ============================================
 
-    /// <summary>Spread control as rate (-1..+1). + = expand, - = contract.</summary>
+    /// <summary>
+    /// Spread output. Meaning depends on mode:
+    ///   • Rate     → -1..+1 rate (use IsAbsoluteMode == false)
+    ///   • Absolute → target swarm separation in meters (use IsAbsoluteMode == true)
+    /// </summary>
     public float SpreadControl { get; private set; }
 
-    /// <summary>Always false — rate-based.</summary>
-    public bool IsAbsoluteMode => false;
+    /// <summary>True when the source is currently in Absolute mode.</summary>
+    public bool IsAbsoluteMode => mode == SpreadMode.Absolute;
 
     /// <summary>Current measured distance between the two hand transforms (meters).</summary>
     public float CurrentDistance { get; private set; }
@@ -79,12 +100,12 @@ public class HandSpreadInput : MonoBehaviour
     // PRIVATE STATE
     // ============================================
 
-    private float _smoothedRate = 0f;
+    private float _smoothed = 0f;
     private float _smoothVelocity = 0f;
 
     void Update()
     {
-        if (Input.GetKeyDown(calibrateKey)) CalibrateNeutral();
+        if (Input.GetKeyDown(calibrateKey)) CaptureNeutral();
 
         if (!IsAvailable)
         {
@@ -92,35 +113,28 @@ public class HandSpreadInput : MonoBehaviour
             return;
         }
 
-        CurrentDistance = Vector3.Distance(leftHand.transform.position, rightHand.transform.position);
+        CurrentDistance = GetCurrentDistance();
+        float target;
 
-        float deadMin = neutralDistance - deadzone;
-        float deadMax = neutralDistance + deadzone;
-        float rate;
-
-        if (CurrentDistance >= deadMin && CurrentDistance <= deadMax)
+        if (mode == SpreadMode.Absolute)
         {
-            rate = 0f;
-        }
-        else if (CurrentDistance < deadMin)
-        {
-            float span = Mathf.Max(deadMin - minDistance, 0.001f);
-            rate = Mathf.Clamp((CurrentDistance - deadMin) / span, -1f, 0f);
+            float t = InputCurves.ToAbsolute01(CurrentDistance, minDistance, maxDistance);
+            target = Mathf.Lerp(minSwarmSeparation, maxSwarmSeparation, t);
         }
         else
         {
-            float span = Mathf.Max(maxDistance - deadMax, 0.001f);
-            rate = Mathf.Clamp((CurrentDistance - deadMax) / span, 0f, 1f);
+            float rawRate = InputCurves.ToRate(CurrentDistance, minDistance, neutralDistance, maxDistance, deadzone);
+            target = InputCurves.ApplyCurve(rawRate, responseCurve, curveExponent);
         }
 
         if (smoothTime > 0f)
         {
-            _smoothedRate = Mathf.SmoothDamp(_smoothedRate, rate, ref _smoothVelocity, smoothTime);
-            SpreadControl = _smoothedRate;
+            _smoothed = Mathf.SmoothDamp(_smoothed, target, ref _smoothVelocity, smoothTime);
+            SpreadControl = _smoothed;
         }
         else
         {
-            SpreadControl = rate;
+            SpreadControl = target;
         }
     }
 
@@ -131,26 +145,35 @@ public class HandSpreadInput : MonoBehaviour
         return hand.HandConfidence == OVRHand.TrackingConfidence.High;
     }
 
-    /// <summary>Set current inter-hand distance as the new neutral.</summary>
-    public void CalibrateNeutral()
+    /// <summary>Inter-hand distance. Public so the calibration flow can read it directly.</summary>
+    public float GetCurrentDistance()
     {
-        if (!IsAvailable) return;
-        neutralDistance = Vector3.Distance(leftHand.transform.position, rightHand.transform.position);
-        _smoothedRate = 0f;
-        _smoothVelocity = 0f;
-        Debug.Log($"HandSpreadInput: calibrated. Neutral = {neutralDistance:F3}m");
+        if (!IsAvailable) return 0f;
+        return Vector3.Distance(leftHand.transform.position, rightHand.transform.position);
     }
+
+    // ============================================
+    // CALIBRATION HOOKS — used by MetaQuestCalibrationFlow
+    // ============================================
+
+    public void CaptureMin()     { if (IsAvailable) minDistance     = GetCurrentDistance(); }
+    public void CaptureNeutral() { if (IsAvailable) { neutralDistance = GetCurrentDistance(); _smoothed = mode == SpreadMode.Rate ? 0f : _smoothed; _smoothVelocity = 0f; } }
+    public void CaptureMax()     { if (IsAvailable) maxDistance     = GetCurrentDistance(); }
+
+    /// <summary>Legacy single-pose neutral capture preserved so existing button flows still work.</summary>
+    public void CalibrateNeutral() => CaptureNeutral();
 
     void OnGUI()
     {
         if (!showDebugInfo || !Application.isPlaying) return;
-        GUILayout.BeginArea(new Rect(10, 500, 360, 110));
-        GUILayout.Label("<b>=== HAND SPREAD (rate) ===</b>");
-        GUILayout.Label($"Available: {IsAvailable}");
+        GUILayout.BeginArea(new Rect(10, 500, 380, 130));
+        GUILayout.Label("<b>=== HAND SPREAD ===</b>");
+        GUILayout.Label($"Available: {IsAvailable}  mode: {mode}");
         if (IsAvailable)
         {
-            GUILayout.Label($"Distance: {CurrentDistance:F3}m  (neutral {neutralDistance:F2}, ±{deadzone:F2})");
-            GUILayout.Label($"Rate output: {SpreadControl:F2}");
+            GUILayout.Label($"d: {CurrentDistance:F2}m  bounds [{minDistance:F2}, {neutralDistance:F2}, {maxDistance:F2}]");
+            string label = mode == SpreadMode.Absolute ? $"Target: {SpreadControl:F2}m" : $"Rate: {SpreadControl:F2}";
+            GUILayout.Label($"{label}  curve: {responseCurve}");
         }
         GUILayout.EndArea();
     }
@@ -158,7 +181,9 @@ public class HandSpreadInput : MonoBehaviour
     void OnDrawGizmos()
     {
         if (!showDebugInfo || !Application.isPlaying || !IsAvailable) return;
-        Gizmos.color = Mathf.Abs(SpreadControl) > 0.01f ? Color.green : Color.yellow;
+        Gizmos.color = mode == SpreadMode.Rate
+            ? (Mathf.Abs(SpreadControl) > 0.01f ? Color.green : Color.yellow)
+            : Color.cyan;
         Gizmos.DrawLine(leftHand.transform.position, rightHand.transform.position);
     }
 }

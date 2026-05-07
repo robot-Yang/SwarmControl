@@ -1,57 +1,69 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
-/// MediaPipe hand tracking input for swarm spread control.
-/// Reads hand distance from WebSocketClient (Python MediaPipe script).
+/// Pose-tracking input for swarm spread control, in either rate or absolute mode.
+/// Reads pre-normalized hand distance (0..1) from WebSocketClient — the Python tracker
+/// already mapped min/max to 0..1 using its per-user calibration profile.
+///
+/// • Absolute mode → target swarm separation (meters), lerp(minSwarmSep, maxSwarmSep, t).
+/// • Rate mode     → -1..+1 around an implicit neutral at 0.5.
 /// </summary>
-public class MediaPipeSpreadInput : MonoBehaviour
+public class PoseSpreadInput : MonoBehaviour
 {
     [Header("WebSocket Connection")]
-    [Tooltip("Reference to WebSocketClient that receives MediaPipe data")]
+    [Tooltip("Reference to WebSocketClient that receives pose-tracking data")]
     public WebSocketClient webSocketClient;
 
-    [Header("Spread Mapping Settings")]
-    [Tooltip("Minimum swarm separation (meters) at distance=0")]
+    [Header("Output Mode")]
+    [Tooltip("Rate (-1..+1 around 0.5 neutral) or Absolute (target meters).")]
+    public SpreadMode mode = SpreadMode.Absolute;
+
+    [Header("Absolute Mode — Target Range (meters between drones)")]
+    [Tooltip("Swarm separation when raw distance == 0 (hands fully closed).")]
     public float minSwarmSeparation = 1.0f;
-    
-    [Tooltip("Maximum swarm separation (meters) at distance=1")]
+
+    [Tooltip("Swarm separation when raw distance == 1 (hands fully spread).")]
     public float maxSwarmSeparation = 10.0f;
 
-    [Header("Response Curve")]
-    [Tooltip("Response curve exponent (1 = linear, 2 = squared). Higher = more precise at small spreads")]
+    [Header("Response")]
+    [Tooltip("Linear (pass-through) or Exponential (sign(x) * |x|^exponent on rate; pow(x, exp) on absolute).")]
+    public ResponseCurve curveType = ResponseCurve.Exponential;
+
+    [Tooltip("Exponent used when curveType == Exponential.")]
+    [FormerlySerializedAs("responseCurve")]
     [Range(1f, 3f)]
-    public float responseCurve = 2.0f;
+    public float curveExponent = 2.0f;
 
     [Header("Deadzone")]
-    [Tooltip("Ignore spread values below this threshold (0 = no deadzone)")]
+    [Tooltip("Absolute mode: ignore raw distance below this. Rate mode: half-width around 0.5 neutral.")]
+    [FormerlySerializedAs("spreadDeadzone")]
     [Range(0f, 0.3f)]
-    public float spreadDeadzone = 0.05f;
+    public float deadzone = 0.05f;
 
     [Header("Smoothing")]
     [Tooltip("Smoothing factor (0 = no smoothing, 1 = max smoothing)")]
     [Range(0f, 0.95f)]
     public float smoothing = 0.3f;
 
-    private float _smoothedDistance = 0f;
+    private float _smoothed = 0f;
 
     // ============================================
     // OUTPUT PROPERTIES
     // ============================================
 
     /// <summary>
-    /// Current swarm spread target (absolute value in meters)
+    /// Spread output. Meaning depends on mode:
+    ///   • Rate     → -1..+1 rate
+    ///   • Absolute → target swarm separation (meters)
     /// </summary>
     public float SpreadControl { get; private set; }
 
-    /// <summary>
-    /// Returns true if MediaPipe is connected and providing data
-    /// </summary>
+    /// <summary>True if the pose tracker is connected and providing data.</summary>
     public bool IsAvailable => webSocketClient != null && webSocketClient.IsConnected;
 
-    /// <summary>
-    /// Always returns true - MediaPipe provides absolute target values
-    /// </summary>
-    public bool IsAbsoluteMode => true;
+    /// <summary>True when the source is currently in Absolute mode.</summary>
+    public bool IsAbsoluteMode => mode == SpreadMode.Absolute;
 
     // ============================================
     // UPDATE LOOP
@@ -59,30 +71,34 @@ public class MediaPipeSpreadInput : MonoBehaviour
 
     void Update()
     {
-        if (IsAvailable)
+        if (!IsAvailable)
         {
-            // Get raw distance from WebSocket (0..1)
-            float rawDistance = webSocketClient.HandDistance;
+            SpreadControl = 0f;
+            return;
+        }
 
-            // Apply deadzone (ignore very small spread values)
-            if (rawDistance < spreadDeadzone)
-            {
-                rawDistance = 0f;
-            }
+        float raw01 = webSocketClient.HandDistance;
+        float target;
 
-            // Apply response curve for better control (more precision at small spreads)
-            float curved = Mathf.Pow(rawDistance, responseCurve);
-
-            // Apply smoothing
-            _smoothedDistance = Mathf.Lerp(_smoothedDistance, curved, 1f - smoothing);
-
-            // Map to swarm separation range
-            SpreadControl = Mathf.Lerp(minSwarmSeparation, maxSwarmSeparation, _smoothedDistance);
+        if (mode == SpreadMode.Absolute)
+        {
+            // Below activation threshold: stay at min separation.
+            float t = raw01 < deadzone ? 0f : raw01;
+            // ApplyCurve expects signed input — for an unsigned 0..1 ramp, just power it directly.
+            float curved = curveType == ResponseCurve.Linear ? t : Mathf.Pow(t, curveExponent);
+            _smoothed = Mathf.Lerp(_smoothed, curved, 1f - smoothing);
+            target = Mathf.Lerp(minSwarmSeparation, maxSwarmSeparation, _smoothed);
         }
         else
         {
-            SpreadControl = 0f;
+            // Rate mode: 0.5 is neutral, deadzone half-width on each side. Map to -1..+1.
+            float rawRate = InputCurves.ToRate(raw01, 0f, 0.5f, 1f, deadzone);
+            float curved = InputCurves.ApplyCurve(rawRate, curveType, curveExponent);
+            _smoothed = Mathf.Lerp(_smoothed, curved, 1f - smoothing);
+            target = _smoothed;
         }
+
+        SpreadControl = target;
     }
 
     // ============================================
@@ -93,12 +109,15 @@ public class MediaPipeSpreadInput : MonoBehaviour
     {
         if (!Application.isPlaying) return;
 
-        GUILayout.BeginArea(new Rect(900, 10, 300, 100));
-        GUILayout.Label($"<b>MediaPipe Spread Input</b> Connected: {IsAvailable}");
+        GUILayout.BeginArea(new Rect(900, 10, 320, 100));
+        GUILayout.Label($"<b>Pose Spread Input</b>  Connected: {IsAvailable}  mode: {mode}");
         if (IsAvailable)
         {
-            GUILayout.Label($"Raw Distance: {webSocketClient.HandDistance:F2}");
-            GUILayout.Label($"Spread Target: {SpreadControl:F2}m");
+            GUILayout.Label($"Raw 0..1: {webSocketClient.HandDistance:F2}  curve: {curveType}");
+            string label = mode == SpreadMode.Absolute
+                ? $"Target: {SpreadControl:F2}m"
+                : $"Rate: {SpreadControl:F2}";
+            GUILayout.Label(label);
         }
         GUILayout.EndArea();
     }

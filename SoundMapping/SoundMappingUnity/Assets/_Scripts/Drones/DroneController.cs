@@ -56,11 +56,15 @@ public class DroneController : MonoBehaviour
     void Start()
     {
         StartNormal();
-        Application.targetFrameRate = 30; // Set the target frame rate to 30 FPS
+        Application.targetFrameRate = 90; // Match Quest native to remove the smoothness confound between VR and desktop conditions
     }
 
     public void crash()
     {
+        // Log the crash event before any state mutation — recorder needs the
+        // pre-crash position and the embodied flag, both lost after RemoveDrone().
+        SwarmTrajectoryRecorder.RecordCrash(this.gameObject);
+
         if (CameraMovement.embodiedDrone == this.gameObject)
         {
             MigrationPointController.selectedDrone = null;

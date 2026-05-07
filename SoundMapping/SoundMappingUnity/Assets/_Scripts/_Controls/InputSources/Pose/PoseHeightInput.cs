@@ -1,23 +1,28 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
-/// MediaPipe hand tracking input for swarm height control.
-/// Reads hand height from WebSocketClient (Python MediaPipe script).
+/// Pose-tracking input for swarm height control.
+/// Reads hand height from WebSocketClient (Python tracker, MediaPipe or RTMPose backend).
 /// </summary>
-public class MediaPipeHeightInput : MonoBehaviour
+public class PoseHeightInput : MonoBehaviour
 {
     [Header("WebSocket Connection")]
-    [Tooltip("Reference to WebSocketClient that receives MediaPipe data")]
+    [Tooltip("Reference to WebSocketClient that receives pose-tracking data")]
     public WebSocketClient webSocketClient;
 
     [Header("Height Mapping Settings")]
     [Tooltip("Maximum vertical speed (units/second) when hands at extreme positions")]
     public float maxVerticalSpeed = 2.0f;
 
-    [Header("Response Curve")]
-    [Tooltip("Response curve exponent (1 = linear, 2 = squared). Higher = more precise at small movements")]
+    [Header("Response")]
+    [Tooltip("Linear (pass-through) or Exponential (sign(x) * |x|^exponent).")]
+    public ResponseCurve curveType = ResponseCurve.Exponential;
+
+    [Tooltip("Exponent used when curveType == Exponential. 2 = squared, 3 = cubed.")]
+    [FormerlySerializedAs("responseCurve")]
     [Range(1f, 3f)]
-    public float responseCurve = 2.0f;
+    public float curveExponent = 2.0f;
 
     [Header("Deadzone")]
     [Tooltip("Ignore height values within this range of neutral (0 = no deadzone)")]
@@ -42,12 +47,12 @@ public class MediaPipeHeightInput : MonoBehaviour
     public float HeightControl { get; private set; }
 
     /// <summary>
-    /// Returns true if MediaPipe is connected and providing data
+    /// Returns true if the pose tracker is connected and providing data
     /// </summary>
     public bool IsAvailable => webSocketClient != null && webSocketClient.IsConnected;
 
     /// <summary>
-    /// Returns false - MediaPipe height is rate-based (like joystick)
+    /// Returns false - pose-tracked height is rate-based (like joystick)
     /// </summary>
     public bool IsAbsoluteMode => false;
 
@@ -68,10 +73,7 @@ public class MediaPipeHeightInput : MonoBehaviour
                 rawHeight = 0f;
             }
 
-            // Apply response curve for better control
-            float sign = Mathf.Sign(rawHeight);
-            float magnitude = Mathf.Abs(rawHeight);
-            float curved = Mathf.Pow(magnitude, responseCurve) * sign;
+            float curved = InputCurves.ApplyCurve(rawHeight, curveType, curveExponent);
 
             // Apply smoothing
             _smoothedHeight = Mathf.Lerp(_smoothedHeight, curved, 1f - smoothing);
@@ -94,7 +96,7 @@ public class MediaPipeHeightInput : MonoBehaviour
         if (!Application.isPlaying) return;
 
         GUILayout.BeginArea(new Rect(900, 30, 300, 100));
-        GUILayout.Label($"<b>MediaPipe Height Input</b> Connected: {IsAvailable}");
+        GUILayout.Label($"<b>Pose Height Input</b> Connected: {IsAvailable}");
         if (IsAvailable)
         {
             GUILayout.Label($"Raw Height: {webSocketClient.HandHeight:F2}");

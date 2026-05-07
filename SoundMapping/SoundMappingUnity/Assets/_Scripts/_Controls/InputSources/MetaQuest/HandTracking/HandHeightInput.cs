@@ -2,12 +2,11 @@ using UnityEngine;
 
 /// <summary>
 /// Rate-based height control via Meta Quest hand tracking.
-/// Average Y position of left/right hand relative to a calibrated neutral height
-/// produces a velocity rate (-1..+1) for swarm height.
+/// Average Y position of left/right hand maps to a rate (-1..+1) using captured
+/// min/neutral/max bounds. Bounds come from the V-key calibration flow.
 ///
 /// Sibling of ControllerHeightInput. Reads OVRHand components and gates on
-/// OVRHand.IsTracked + (optional) high confidence — naturally exclusive with
-/// controller input at the hardware level.
+/// OVRHand.IsTracked + (optional) high confidence.
 /// </summary>
 public class HandHeightInput : MonoBehaviour
 {
@@ -18,22 +17,30 @@ public class HandHeightInput : MonoBehaviour
     [Tooltip("Right hand from OVRCameraRig (OVRHand component)")]
     public OVRHand rightHand;
 
-    [Tooltip("Center Eye Anchor from OVRCameraRig — eye-level reference for neutral")]
+    [Tooltip("Center Eye Anchor from OVRCameraRig — only used by debug overlay")]
     public Transform centerEyeAnchor;
 
-    [Header("Rate Range (meters from neutral)")]
-    [Tooltip("Hand displacement above neutral that produces full +1 rate")]
-    public float maxHeightAbove = 0.4f;
+    [Header("Calibrated Bounds (meters, world Y)")]
+    [Tooltip("World Y at the lowest comfortable hand position. Set by calibration.")]
+    public float minHeight = 0.8f;
 
-    [Tooltip("Hand displacement below neutral that produces full -1 rate")]
-    public float maxHeightBelow = 0.4f;
+    [Tooltip("World Y at the comfortable neutral. Set by calibration.")]
+    public float neutralHeight = 1.2f;
 
-    [Header("Default Neutral")]
-    [Tooltip("Vertical offset from eye level for default neutral. Negative = below eyes.")]
-    public float neutralOffset = -0.3f;
+    [Tooltip("World Y at the highest comfortable hand position. Set by calibration.")]
+    public float maxHeight = 1.8f;
+
+    [Header("Response")]
+    [Tooltip("Linear or exponential mapping from delta-from-neutral to rate.")]
+    public ResponseCurve responseCurve = ResponseCurve.Linear;
+
+    [Tooltip("Exponent used when responseCurve == Exponential. 2 = squared, 3 = cubed.")]
+    [Range(1f, 3f)]
+    public float curveExponent = 2.0f;
 
     [Header("Deadzone")]
-    [Tooltip("Ignore movements within this distance from neutral (meters)")]
+    [Tooltip("Half-width of the no-change band around neutral (meters)")]
+    [Range(0f, 0.2f)]
     public float deadzone = 0.05f;
 
     [Header("Filtering")]
@@ -46,7 +53,7 @@ public class HandHeightInput : MonoBehaviour
     public float smoothTime = 0.1f;
 
     [Header("Local Test Calibration")]
-    [Tooltip("Optional standalone calibrate key — official flow is via InputFusionManager.PerformCalibration()")]
+    [Tooltip("Optional standalone re-center key — official flow is V (multi-step).")]
     public KeyCode calibrateKey = KeyCode.H;
 
     [Header("Debug")]
@@ -62,12 +69,11 @@ public class HandHeightInput : MonoBehaviour
     /// <summary>Always false — rate-based.</summary>
     public bool IsAbsoluteMode => false;
 
-    /// <summary>True when at least one hand is tracked (with required confidence) and centerEyeAnchor is assigned.</summary>
+    /// <summary>True when at least one hand is tracked (with required confidence).</summary>
     public bool IsAvailable
     {
         get
         {
-            if (centerEyeAnchor == null) return false;
             if (leftHand == null && rightHand == null) return false;
             return IsHandTracked(leftHand) || IsHandTracked(rightHand);
         }
@@ -77,13 +83,12 @@ public class HandHeightInput : MonoBehaviour
     // PRIVATE STATE
     // ============================================
 
-    private float _calibrationOffset = 0f;
     private float _smoothedRate = 0f;
     private float _smoothVelocity = 0f;
 
     void Update()
     {
-        if (Input.GetKeyDown(calibrateKey)) CalibrateNeutral();
+        if (Input.GetKeyDown(calibrateKey)) CaptureNeutral();
 
         if (!IsAvailable)
         {
@@ -91,34 +96,18 @@ public class HandHeightInput : MonoBehaviour
             return;
         }
 
-        float handY = GetAverageHandHeight();
-        float neutralY = centerEyeAnchor.position.y + neutralOffset + _calibrationOffset;
-        float delta = handY - neutralY;
-
-        float rate;
-        if (Mathf.Abs(delta) < deadzone)
-        {
-            rate = 0f;
-        }
-        else if (delta > 0f)
-        {
-            float span = Mathf.Max(maxHeightAbove - deadzone, 0.001f);
-            rate = Mathf.Clamp01((delta - deadzone) / span);
-        }
-        else
-        {
-            float span = Mathf.Max(maxHeightBelow - deadzone, 0.001f);
-            rate = -Mathf.Clamp01((-delta - deadzone) / span);
-        }
+        float currentY = GetAverageHandHeight();
+        float rawRate = InputCurves.ToRate(currentY, minHeight, neutralHeight, maxHeight, deadzone);
+        float curvedRate = InputCurves.ApplyCurve(rawRate, responseCurve, curveExponent);
 
         if (smoothTime > 0f)
         {
-            _smoothedRate = Mathf.SmoothDamp(_smoothedRate, rate, ref _smoothVelocity, smoothTime);
+            _smoothedRate = Mathf.SmoothDamp(_smoothedRate, curvedRate, ref _smoothVelocity, smoothTime);
             HeightControl = _smoothedRate;
         }
         else
         {
-            HeightControl = rate;
+            HeightControl = curvedRate;
         }
     }
 
@@ -129,7 +118,11 @@ public class HandHeightInput : MonoBehaviour
         return hand.HandConfidence == OVRHand.TrackingConfidence.High;
     }
 
-    float GetAverageHandHeight()
+    /// <summary>
+    /// Average world Y of whichever hands are currently tracked.
+    /// Public so the V-key calibration flow can read it.
+    /// </summary>
+    public float GetAverageHandHeight()
     {
         float sum = 0f;
         int n = 0;
@@ -138,30 +131,28 @@ public class HandHeightInput : MonoBehaviour
         return n > 0 ? sum / n : 0f;
     }
 
-    /// <summary>Set current hand height as the new neutral.</summary>
-    public void CalibrateNeutral()
-    {
-        if (!IsAvailable) return;
-        float currentY = GetAverageHandHeight();
-        float defaultNeutral = centerEyeAnchor.position.y + neutralOffset;
-        _calibrationOffset = currentY - defaultNeutral;
-        _smoothedRate = 0f;
-        _smoothVelocity = 0f;
-        Debug.Log($"HandHeightInput: calibrated. Offset = {_calibrationOffset:F3}m");
-    }
+    // ============================================
+    // CALIBRATION HOOKS — used by MetaQuestCalibrationFlow
+    // ============================================
+
+    public void CaptureMin()     { if (IsAvailable) minHeight     = GetAverageHandHeight(); }
+    public void CaptureNeutral() { if (IsAvailable) { neutralHeight = GetAverageHandHeight(); _smoothedRate = 0f; _smoothVelocity = 0f; } }
+    public void CaptureMax()     { if (IsAvailable) maxHeight     = GetAverageHandHeight(); }
+
+    /// <summary>Legacy single-pose neutral capture preserved so existing button flows still work.</summary>
+    public void CalibrateNeutral() => CaptureNeutral();
 
     void OnGUI()
     {
         if (!showDebugInfo || !Application.isPlaying) return;
-        GUILayout.BeginArea(new Rect(10, 380, 360, 110));
+        GUILayout.BeginArea(new Rect(10, 380, 360, 130));
         GUILayout.Label("<b>=== HAND HEIGHT (rate) ===</b>");
         GUILayout.Label($"Available: {IsAvailable}");
         if (IsAvailable)
         {
             float curY = GetAverageHandHeight();
-            float neuY = centerEyeAnchor.position.y + neutralOffset + _calibrationOffset;
-            GUILayout.Label($"Δ from neutral: {(curY - neuY):F3}m");
-            GUILayout.Label($"Rate output: {HeightControl:F2}");
+            GUILayout.Label($"Y: {curY:F2}m  bounds [{minHeight:F2}, {neutralHeight:F2}, {maxHeight:F2}]");
+            GUILayout.Label($"Rate output: {HeightControl:F2}  curve: {responseCurve}");
         }
         GUILayout.EndArea();
     }

@@ -2567,6 +2567,8 @@ GameObject:
   - component: {fileID: 1134678138}
   - component: {fileID: 1134678141}
   - component: {fileID: 1134678140}
+  - component: {fileID: 1134678142}
+  - component: {fileID: 1134678143}
   m_Layer: 0
   m_Name: InputManager
   m_TagString: Untagged
@@ -2590,19 +2592,22 @@ MonoBehaviour:
   imuMovementInput: {fileID: 1134678139}
   headsetYawInput: {fileID: 1134678111}
   imuYawInput: {fileID: 1134678138}
-  mediaPipeSpreadInput: {fileID: 1134678124}
-  mediaPipeHeightInput: {fileID: 1134678125}
+  poseSpreadInput: {fileID: 1134678124}
+  poseHeightInput: {fileID: 1134678125}
+  poseYawInput: {fileID: 1134678143}
   armIMUInput: {fileID: 1134678131}
   handIMUFusion: {fileID: 1134678130}
   handHeightInput: {fileID: 1134678135}
   handSpreadInput: {fileID: 1134678134}
   controllerHeightInput: {fileID: 1134678137}
   controllerSpreadInput: {fileID: 1134678136}
+  metaQuestCalibration: {fileID: 1134678142}
   useIMUForMovement: 1
   useMetaQuestForRotation: 0
   useIMUForRotation: 0
-  useMediaPipeForSpread: 0
-  useMediaPipeForHeight: 0
+  usePoseForSpread: 0
+  usePoseForHeight: 0
+  usePoseForRotation: 0
   useArmIMUForSpreadHeight: 0
   useMetaHandsForHeight: 0
   useMetaHandsForSpread: 0
@@ -2721,10 +2726,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   webSocketClient: {fileID: 1134678126}
+  mode: 1
   minSwarmSeparation: 1
   maxSwarmSeparation: 5
-  responseCurve: 1.7
-  spreadDeadzone: 0.1
+  curveType: 1
+  curveExponent: 1.7
+  deadzone: 0.1
   smoothing: 0.3
 --- !u!114 &1134678125
 MonoBehaviour:
@@ -2740,7 +2747,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   webSocketClient: {fileID: 1134678126}
   maxVerticalSpeed: 1
-  responseCurve: 1.7
+  curveType: 1
+  curveExponent: 1.7
   heightDeadzone: 0.2
   smoothing: 0.3
 --- !u!114 &1134678126
@@ -2849,9 +2857,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   leftHand: {fileID: 710912639}
   rightHand: {fileID: 1555848675}
-  neutralDistance: 0.35
+  mode: 0
   minDistance: 0.1
+  neutralDistance: 0.35
   maxDistance: 0.8
+  minSwarmSeparation: 1
+  maxSwarmSeparation: 10
+  responseCurve: 0
+  curveExponent: 2
   deadzone: 0.1
   requireHighConfidence: 1
   smoothTime: 0.1
@@ -2872,9 +2885,11 @@ MonoBehaviour:
   leftHand: {fileID: 710912639}
   rightHand: {fileID: 1555848675}
   centerEyeAnchor: {fileID: 1940585594}
-  maxHeightAbove: 0.4
-  maxHeightBelow: 0.4
-  neutralOffset: -0.3
+  minHeight: 0.8
+  neutralHeight: 1.2
+  maxHeight: 1.8
+  responseCurve: 0
+  curveExponent: 2
   deadzone: 0.05
   requireHighConfidence: 1
   smoothTime: 0.1
@@ -2893,9 +2908,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cameraRig: {fileID: 1940585593}
-  neutralDistance: 0.35
+  mode: 0
   minDistance: 0.1
+  neutralDistance: 0.35
   maxDistance: 0.8
+  minSwarmSeparation: 1
+  maxSwarmSeparation: 10
+  responseCurve: 0
+  curveExponent: 2
   deadzone: 0.1
   smoothTime: 0.1
   calibrateKey: 107
@@ -2913,9 +2933,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cameraRig: {fileID: 1940585593}
-  maxHeightAbove: 0.4
-  maxHeightBelow: 0.4
-  neutralOffset: -0.3
+  minHeight: 0.8
+  neutralHeight: 1.2
+  maxHeight: 1.8
+  responseCurve: 0
+  curveExponent: 2
   deadzone: 0.05
   smoothTime: 0.1
   calibrateKey: 106
@@ -3073,6 +3095,47 @@ MonoBehaviour:
   alignHeadingToEmbodied: 1
   yawOnly: 1
   alignSlerpSpeed: 8
+--- !u!114 &1134678142
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ed603cff13d05a40a01140240fc8c42, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  controllerSpread: {fileID: 0}
+  handSpread: {fileID: 0}
+  controllerHeight: {fileID: 0}
+  handHeight: {fileID: 0}
+  startKey: 118
+  advanceKey: 32
+  cancelKey: 27
+  countdownPerStep: 3
+  verboseLogging: 1
+--- !u!114 &1134678143
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1134678106}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 716da53bd2cd6ae469c43efab8bb31ba, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  webSocketClient: {fileID: 1134678126}
+  maxYawDeg: 25
+  curveType: 1
+  curveExponent: 2
+  deadzoneDeg: 3
+  smoothing: 0.3
+  invertSign: 0
+  showDebugInfo: 0
 --- !u!1 &1179672691
 GameObject:
   m_ObjectHideFlags: 0
