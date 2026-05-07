@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python -m compileall -q swarm_control apps)"
-    ]
-  }
-}
