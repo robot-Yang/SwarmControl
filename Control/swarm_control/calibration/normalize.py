@@ -12,18 +12,35 @@ def _clamp(x: float, lo: float, hi: float) -> float:
 class Normalizer:
     """Stateful normalizer: raw (distance, height) → smoothed (0..1, -1..+1).
 
-    Holds an EMA per channel so smoothing survives across frames.
+    Holds an EMA per channel so smoothing survives across frames. Yaw uses a
+    separate EMA with a less aggressive alpha — head turns are deliberate and
+    over-smoothing them feels laggy, whereas spread/height jitter benefits
+    more from heavy smoothing.
     """
+
+    # Yaw is sent in degrees, not normalized 0..1, so the "alpha = profile.smooth_alpha"
+    # used for spread/height isn't quite right. We use a separate, lighter alpha.
+    YAW_ALPHA = 0.5
 
     def __init__(self, profile: CalibrationProfile):
         self.profile = profile
         self.alpha = float(profile.smooth_alpha)
         self._dist_ema: Optional[float] = None
         self._height_ema: Optional[float] = None
+        self._yaw_ema: Optional[float] = None
 
     def reset(self) -> None:
         self._dist_ema = None
         self._height_ema = None
+        self._yaw_ema = None
+
+    def smooth_yaw_deg(self, raw_yaw_deg: float) -> float:
+        """EMA-smooth a yaw value in degrees. Stateless if first call."""
+        if self._yaw_ema is None:
+            self._yaw_ema = raw_yaw_deg
+        else:
+            self._yaw_ema = self.YAW_ALPHA * raw_yaw_deg + (1 - self.YAW_ALPHA) * self._yaw_ema
+        return self._yaw_ema
 
     def normalize_horizontal(self, raw_distance: float) -> float:
         p = self.profile

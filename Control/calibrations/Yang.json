@@ -1,0 +1,22 @@
+{
+    "profile_name": "Yang",
+    "description": "",
+    "min_horizontal": 117.40776249914919,
+    "max_horizontal": 317.6639722368527,
+    "min_vertical": 62.884973883628845,
+    "max_vertical": 303.40354186296463,
+    "neutral_vertical": 184.17894178628922,
+    "smooth_alpha": 0.2,
+    "horizontal_linearization": {
+        "type": "linear",
+        "slope": 1.0,
+        "intercept": 0.0
+    },
+    "vertical_linearization": {
+        "type": "linear",
+        "slope": 1.0,
+        "intercept": 0.0
+    },
+    "backend": "rtmpose",
+    "neutral_yaw_deg": 2.423892301987422
+}

@@ -56,14 +56,25 @@ def main() -> int:
         print(f"error: cannot open camera {args.camera}")
         return 1
 
+    # Match the tracker's lower-res / higher-FPS profile so calibration runs
+    # at the same camera settings the live session will use.
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+    cap.set(cv2.CAP_PROP_FPS, 60)
+    print(f"[calibrate] camera negotiated: {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x"
+          f"{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))} @ {cap.get(cv2.CAP_PROP_FPS):.0f} FPS")
+
     window = "Calibration"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
     cv2.setWindowProperty(window, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     captured: dict[str, float] = {}
     neutral_yaw_deg: float | None = None
-    # +1 step on rtmpose for yaw neutral capture; mediapipe has no face landmarks.
-    yaw_capture_enabled = backend.name == "rtmpose"
+    # Both backends now estimate head yaw via 6-point PnP — rtmpose from
+    # Wholebody face landmarks, mediapipe from Face Mesh. Add the +1 capture
+    # step for either. (If you add a backend without face landmarks later,
+    # extend this check.)
+    yaw_capture_enabled = backend.name in ("rtmpose", "mediapipe")
     total_steps = len(STEPS) + (1 if yaw_capture_enabled else 0)
     try:
         for i, (axis, key, title, instruction) in enumerate(STEPS, start=1):

@@ -14,16 +14,18 @@ class WebSocketServer:
 
     Message schema (JSON):
         {
-            "t":        float, monotonic-ish wall time (seconds, time.time())
-            "seq":      int, monotonically increasing per server
-            "valid":    bool
-            "backend":  str, name of the pose backend that produced this frame
-            "left":     [x, y] | null         # raw keypoint, pixel coords
-            "right":    [x, y] | null
-            "distance": float | null          # normalized 0..1
-            "height":   float | null          # normalized -1..+1
-            "yaw":      float | null          # head yaw in degrees, neutral-subtracted
-                                              # (only present for backends with face landmarks)
+            "t":         float, send time (seconds, time.time())
+            "t_capture": float | null, frame capture time (seconds, time.time())
+                                       — diff (t - t_capture) is Python-side latency
+            "seq":       int, monotonically increasing per server
+            "valid":     bool
+            "backend":   str, name of the pose backend that produced this frame
+            "left":      [x, y] | null         # raw keypoint, pixel coords
+            "right":     [x, y] | null
+            "distance":  float | null          # normalized 0..1
+            "height":    float | null          # normalized -1..+1
+            "yaw":       float | null          # head yaw in degrees, neutral-subtracted
+                                                # (only present for backends with face landmarks)
         }
     """
 
@@ -85,6 +87,7 @@ class WebSocketServer:
         distance: float | None,
         height: float | None,
         yaw: float | None = None,
+        t_capture: float | None = None,
     ) -> None:
         if not self._clients or self._loop is None:
             return
@@ -92,6 +95,7 @@ class WebSocketServer:
         self._seq += 1
         payload = json.dumps({
             "t": time.time(),
+            "t_capture": round(t_capture, 6) if t_capture is not None else None,
             "seq": self._seq,
             "valid": bool(valid),
             "backend": backend,

@@ -1,9 +1,17 @@
-"""Head pose estimation from RTMPose Wholebody face landmarks.
+"""Head pose estimation from face landmarks via the classic 6-point PnP solve.
 
-Uses the classic 6-point PnP solve (cv2.solvePnP) on a canonical 3D face model.
-Six landmarks were chosen because they are rigid (don't deform with expression),
-span the face well (non-coplanar — a requirement for a stable PnP), and are reliably
-detected by RTMPose Wholebody.
+Uses cv2.solvePnP on a canonical 3D face model. Six landmarks were chosen because
+they are rigid (don't deform with expression), span the face well (non-coplanar —
+a requirement for a stable PnP), and are reliably detected by both RTMPose
+Wholebody (iBUG-68) and MediaPipe Face Mesh (468-point).
+
+Two entry points:
+  • `solve_yaw_from_pts2d(pts2d, frame_shape)` — generic solver. Pass exactly six
+    (x, y) pixel coordinates in the order [nose tip, chin, right eye outer,
+    left eye outer, right mouth corner, left mouth corner].
+  • `estimate_head_yaw_deg(keypoints, scores, frame_shape)` — convenience wrapper
+    for RTMPose Wholebody outputs. Picks the right indices, gates on confidence,
+    then calls the generic solver.
 
 Returned yaw is in degrees:
     0  = facing the camera
@@ -79,24 +87,21 @@ def _camera_matrix(width: int, height: int) -> np.ndarray:
     )
 
 
-def estimate_head_yaw_deg(
-    keypoints: np.ndarray,
-    scores: np.ndarray,
+def solve_yaw_from_pts2d(
+    pts2d: np.ndarray,
     frame_shape: tuple[int, int, int],
-    *,
-    min_confidence: float = 0.3,
 ) -> Optional[float]:
-    """Compute head yaw in degrees from a Wholebody keypoint set.
+    """Generic 6-point PnP yaw solver.
 
-    Returns None if any of the 6 PnP landmarks fall below `min_confidence`,
-    or if the PnP solve fails (very rare).
+    `pts2d` must be a (6, 2) array of pixel coordinates in this exact order:
+        [nose_tip, chin, right_eye_outer, left_eye_outer,
+         right_mouth_corner, left_mouth_corner]
+    "right" / "left" are from the *subject's* perspective — i.e., right_eye_outer
+    appears on the LEFT side of the image when viewing the subject face-on.
+
+    Returns yaw in degrees, or None if PnP fails.
     """
-    if keypoints is None or len(keypoints) <= max(WHOLEBODY_FACE_INDICES):
-        return None
-
-    pts2d = keypoints[list(WHOLEBODY_FACE_INDICES)]
-    confs = scores[list(WHOLEBODY_FACE_INDICES)]
-    if np.any(confs < min_confidence):
+    if pts2d is None or pts2d.shape != (6, 2):
         return None
 
     h, w = frame_shape[:2]
@@ -117,3 +122,26 @@ def estimate_head_yaw_deg(
     yaw_rad = float(np.arctan2(R[1, 0], R[0, 0]))
     yaw_deg = float(np.degrees(yaw_rad))
     return -yaw_deg if SIGN_FLIP_YAW else yaw_deg
+
+
+def estimate_head_yaw_deg(
+    keypoints: np.ndarray,
+    scores: np.ndarray,
+    frame_shape: tuple[int, int, int],
+    *,
+    min_confidence: float = 0.3,
+) -> Optional[float]:
+    """RTMPose Wholebody convenience wrapper around `solve_yaw_from_pts2d`.
+
+    Returns None if any of the 6 PnP landmarks fall below `min_confidence`,
+    or if the PnP solve fails (very rare).
+    """
+    if keypoints is None or len(keypoints) <= max(WHOLEBODY_FACE_INDICES):
+        return None
+
+    pts2d = keypoints[list(WHOLEBODY_FACE_INDICES)]
+    confs = scores[list(WHOLEBODY_FACE_INDICES)]
+    if np.any(confs < min_confidence):
+        return None
+
+    return solve_yaw_from_pts2d(pts2d, frame_shape)

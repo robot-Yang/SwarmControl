@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
+from collections import deque
 from pathlib import Path
 
 import cv2
@@ -18,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from swarm_control.calibration import CalibrationProfile, Normalizer
 from swarm_control.features import extract_two_hand_features
+from swarm_control.io import ThreadedCamera
 from swarm_control.pose import build_backend
 from swarm_control.transport import WebSocketServer
 from swarm_control.ui import overlay
@@ -53,31 +56,45 @@ def main() -> int:
     ws = WebSocketServer(host=args.host, port=args.port)
     ws.start()
 
-    cap = cv2.VideoCapture(args.camera)
+    # ThreadedCamera reads frames in a background thread; main-loop read() is
+    # non-blocking and returns the latest frame, eliminating capture-side stalls.
+    cap = ThreadedCamera(args.camera, width=640, height=360, fps=60)
     if not cap.isOpened():
         print(f"error: cannot open camera {args.camera}")
         return 1
+    print(f"[tracker] camera negotiated: {int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))}x"
+          f"{int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))} @ {cap.get(cv2.CAP_PROP_FPS):.0f} FPS")
 
     win = f"Tracker [{backend.name}] - {profile.profile_name}"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
 
     print(f"[tracker] backend={backend.name} profile={profile.profile_name}  press 'q' to quit")
 
+    # Latency telemetry: rolling window of capture-to-send timings.
+    # Logs P50/P95 every ~2 s so reviewers / Methods sections have real numbers.
+    latency_ms_window: deque[float] = deque(maxlen=120)
+    last_latency_print = time.monotonic()
+
     try:
         while True:
             ok, frame = cap.read()
-            if not ok:
-                break
+            t_capture = time.time()  # timestamp the frame the moment we own it
+            if not ok or frame is None:
+                # Threaded camera hasn't produced a frame yet (or temporarily empty).
+                # Yield briefly and retry instead of exiting.
+                cv2.waitKey(1)
+                continue
 
             pose = backend.detect(frame)
             feats = extract_two_hand_features(pose)
 
-            # Yaw is independent of hand validity. Subtract the captured neutral
-            # so Unity receives a centered, degree-valued signal it can bound itself.
+            # Yaw is independent of hand validity. Subtract the captured neutral,
+            # then run through the normalizer's yaw EMA so single-frame jitter
+            # from the PnP solve doesn't leak straight to Unity.
             yaw_relative_deg: float | None = None
             if pose.head_yaw_deg is not None:
                 offset = profile.neutral_yaw_deg if profile.neutral_yaw_deg is not None else 0.0
-                yaw_relative_deg = float(pose.head_yaw_deg) - float(offset)
+                yaw_relative_deg = normalizer.smooth_yaw_deg(float(pose.head_yaw_deg) - float(offset))
 
             if feats is not None:
                 backend.draw(frame, pose)
@@ -91,7 +108,9 @@ def main() -> int:
                     distance=d_norm,
                     height=h_norm,
                     yaw=yaw_relative_deg,
+                    t_capture=t_capture,
                 )
+                latency_ms_window.append((time.time() - t_capture) * 1000.0)
 
                 yaw_label = f"yaw {yaw_relative_deg:+.1f}°" if yaw_relative_deg is not None else "yaw n/a"
                 overlay.draw_status_lines(
@@ -119,12 +138,21 @@ def main() -> int:
                     left_xy=None, right_xy=None,
                     distance=None, height=None,
                     yaw=yaw_relative_deg,
+                    t_capture=t_capture,
                 )
                 overlay.draw_status_lines(
                     frame,
                     [("show both hands at similar distance", (0, 0, 255), 0.6)],
                     origin=(10, 30),
                 )
+
+            # Periodic latency report (P50 / P95 of the last ~120 frames).
+            if latency_ms_window and time.monotonic() - last_latency_print > 2.0:
+                arr = sorted(latency_ms_window)
+                p50 = arr[len(arr) // 2]
+                p95 = arr[int(len(arr) * 0.95)]
+                print(f"[tracker] python-side latency: P50={p50:.1f}ms  P95={p95:.1f}ms  (n={len(arr)})")
+                last_latency_print = time.monotonic()
 
             overlay.draw_status_lines(
                 frame,

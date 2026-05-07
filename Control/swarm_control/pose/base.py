@@ -12,8 +12,14 @@ class TwoHandPose:
 
     All coordinates are in pixel space of the input frame.
     `draw_payload` is opaque: only the originating backend's `draw()` reads it.
-    `head_yaw_deg` is optional — populated by backends that estimate head pose
-    (currently RTMPose Wholebody); other backends leave it None.
+
+    Optional fields populated when the backend supplies them:
+      • `head_yaw_deg` — head pose in degrees (RTMPose Wholebody / MediaPipe Face)
+      • `shoulder_mid_xy` + `shoulder_width_px` — body anchor for body-relative
+        feature extraction. When present, `extract_two_hand_features` switches
+        from image-relative to body-relative measurements: hand height becomes
+        wrist_y − shoulder_mid_y, and spread becomes wrist_distance ÷ shoulder
+        width (dimensionless). When absent, falls back to image-relative.
     """
 
     valid: bool
@@ -23,6 +29,8 @@ class TwoHandPose:
     right_size: float = 0.0
     confidence: float = 0.0
     head_yaw_deg: Optional[float] = None
+    shoulder_mid_xy: Optional[tuple[float, float]] = None
+    shoulder_width_px: float = 0.0
     draw_payload: Any = field(default=None, repr=False)
 
 

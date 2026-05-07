@@ -110,6 +110,11 @@ def main() -> int:
         print(f"error: cannot open camera {args.camera}")
         return 1
 
+    # Match calibrate/tracker camera settings for consistency across the pipeline.
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
+    cap.set(cv2.CAP_PROP_FPS, 60)
+
     window = "Linearization"
     cv2.namedWindow(window, cv2.WINDOW_NORMAL)
 

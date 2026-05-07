@@ -1,10 +1,51 @@
 from __future__ import annotations
 
+import os
+import sys
+from pathlib import Path
+from typing import Optional
+
 import cv2
 import numpy as np
 
 from .base import TwoHandPose
 from .head_pose import estimate_head_yaw_deg
+
+
+def _register_bundled_cuda_dlls() -> None:
+    """Make pip-installed CUDA/cuDNN DLLs visible to onnxruntime on Windows.
+
+    Packages like ``nvidia-cublas-cu12`` and ``nvidia-cudnn-cu12`` put DLLs in
+    ``.venv/Lib/site-packages/nvidia/<pkg>/bin/``. Windows' default DLL loader
+    doesn't search there, so onnxruntime fails to load the CUDA provider with
+    a "cublasLt64_12.dll missing" error and silently falls back to CPU.
+
+    We register each ``nvidia/*/bin`` directory two ways before importing
+    rtmlib (which transitively imports onnxruntime):
+      1. ``os.add_dll_directory`` — covers direct LoadLibrary calls.
+      2. Prepend to ``PATH`` — covers transitive DLL imports
+         (``onnxruntime_providers_cuda.dll`` → ``cublasLt64_12.dll``), which
+         the user-directory mechanism doesn't reliably catch.
+    """
+    if sys.platform != "win32":
+        return
+    site_nvidia = Path(sys.prefix) / "Lib" / "site-packages" / "nvidia"
+    if not site_nvidia.is_dir():
+        return
+    bin_dirs: list[str] = []
+    for pkg in site_nvidia.iterdir():
+        bin_dir = pkg / "bin"
+        if bin_dir.is_dir():
+            bin_dirs.append(str(bin_dir))
+            try:
+                os.add_dll_directory(str(bin_dir))
+            except OSError:
+                pass
+    if bin_dirs:
+        os.environ["PATH"] = os.pathsep.join(bin_dirs) + os.pathsep + os.environ.get("PATH", "")
+
+
+_register_bundled_cuda_dlls()
 
 # Indices 0..16 of Wholebody match COCO-17 body keypoints exactly,
 # so the wrist/elbow/shoulder indices are unchanged from when this used `Body`.
@@ -65,6 +106,19 @@ class RTMPoseBackend:
             return None
         return keypoints[best_idx], scores[best_idx]
 
+    def _shoulder_anchor(self, kp: np.ndarray, sc: np.ndarray) -> tuple[Optional[tuple[float, float]], float]:
+        """Return ((mid_x, mid_y), shoulder_width_px) or (None, 0.0) if shoulders
+        aren't confidently detected. Used as the body anchor for body-relative
+        feature extraction downstream.
+        """
+        if sc[_COCO_LEFT_SHOULDER] < self._min_conf or sc[_COCO_RIGHT_SHOULDER] < self._min_conf:
+            return None, 0.0
+        lx, ly = float(kp[_COCO_LEFT_SHOULDER, 0]), float(kp[_COCO_LEFT_SHOULDER, 1])
+        rx, ry = float(kp[_COCO_RIGHT_SHOULDER, 0]), float(kp[_COCO_RIGHT_SHOULDER, 1])
+        mid = ((lx + rx) / 2.0, (ly + ry) / 2.0)
+        width = float(np.hypot(lx - rx, ly - ry))
+        return mid, width
+
     def detect(self, frame_bgr: np.ndarray) -> TwoHandPose:
         keypoints, scores = self._body(frame_bgr)
         keypoints = np.asarray(keypoints)
@@ -79,14 +133,21 @@ class RTMPoseBackend:
         kp, sc = picked
         self._last_keypoints, self._last_scores = kp, sc
 
-        # Head yaw is independent of wrist availability, so compute it eagerly
-        # and attach to whichever TwoHandPose we end up returning.
+        # Head yaw and shoulder anchor are independent of wrist availability,
+        # so compute them eagerly and attach to whichever TwoHandPose we return.
         head_yaw_deg = estimate_head_yaw_deg(kp, sc, frame_bgr.shape, min_confidence=self._min_conf)
+        shoulder_mid_xy, shoulder_width_px = self._shoulder_anchor(kp, sc)
 
         s_lw = float(sc[_COCO_LEFT_WRIST])
         s_rw = float(sc[_COCO_RIGHT_WRIST])
         if s_lw < self._min_conf or s_rw < self._min_conf:
-            return TwoHandPose(valid=False, head_yaw_deg=head_yaw_deg, draw_payload=(kp, sc))
+            return TwoHandPose(
+                valid=False,
+                head_yaw_deg=head_yaw_deg,
+                shoulder_mid_xy=shoulder_mid_xy,
+                shoulder_width_px=shoulder_width_px,
+                draw_payload=(kp, sc),
+            )
 
         left_xy = (float(kp[_COCO_LEFT_WRIST, 0]), float(kp[_COCO_LEFT_WRIST, 1]))
         right_xy = (float(kp[_COCO_RIGHT_WRIST, 0]), float(kp[_COCO_RIGHT_WRIST, 1]))
@@ -107,6 +168,8 @@ class RTMPoseBackend:
             right_size=_forearm(_COCO_RIGHT_ELBOW, _COCO_RIGHT_WRIST),
             confidence=min(s_lw, s_rw),
             head_yaw_deg=head_yaw_deg,
+            shoulder_mid_xy=shoulder_mid_xy,
+            shoulder_width_px=shoulder_width_px,
             draw_payload=(kp, sc),
         )
 
