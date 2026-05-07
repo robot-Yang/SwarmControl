@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 
 CALIBRATIONS_DIR = Path(__file__).resolve().parents[2] / "calibrations"
@@ -68,6 +68,10 @@ class CalibrationProfile:
     horizontal_linearization: Linearization = field(default_factory=Linearization)
     vertical_linearization: Linearization = field(default_factory=Linearization)
     backend: str = "mediapipe"  # which pose backend produced this calibration
+    # Head-yaw neutral in degrees, captured during calibration. The tracker subtracts
+    # this from each frame's measured yaw before broadcasting; Unity bounds the result.
+    # Only meaningful when backend == "rtmpose" (Wholebody). None = no yaw capture.
+    neutral_yaw_deg: Optional[float] = None
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -77,6 +81,7 @@ class CalibrationProfile:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "CalibrationProfile":
+        ny = d.get("neutral_yaw_deg")
         return cls(
             profile_name=d.get("profile_name", "default"),
             description=d.get("description", ""),
@@ -93,6 +98,7 @@ class CalibrationProfile:
                 d.get("vertical_linearization", {})
             ),
             backend=d.get("backend", "mediapipe"),
+            neutral_yaw_deg=float(ny) if ny is not None else None,
         )
 
     @classmethod

@@ -22,6 +22,8 @@ class WebSocketServer:
             "right":    [x, y] | null
             "distance": float | null          # normalized 0..1
             "height":   float | null          # normalized -1..+1
+            "yaw":      float | null          # head yaw in degrees, neutral-subtracted
+                                              # (only present for backends with face landmarks)
         }
     """
 
@@ -82,6 +84,7 @@ class WebSocketServer:
         right_xy: tuple[float, float] | None,
         distance: float | None,
         height: float | None,
+        yaw: float | None = None,
     ) -> None:
         if not self._clients or self._loop is None:
             return
@@ -96,5 +99,6 @@ class WebSocketServer:
             "right": [round(right_xy[0], 2), round(right_xy[1], 2)] if right_xy else None,
             "distance": round(distance, 4) if distance is not None else None,
             "height": round(height, 4) if height is not None else None,
+            "yaw": round(yaw, 3) if yaw is not None else None,
         })
         asyncio.run_coroutine_threadsafe(self._broadcast(payload), self._loop)

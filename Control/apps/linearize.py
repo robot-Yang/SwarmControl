@@ -1,7 +1,8 @@
 """Sample 10 known target positions and fit per-axis linearization curves.
 
 Examples:
-    python -m apps.linearize --backend mediapipe --profile Gabriel
+    python -m apps.linearize --profile Gabriel                       # rtmpose + cuda (default)
+    python -m apps.linearize --backend mediapipe --profile Gabriel   # CPU fallback
 """
 
 from __future__ import annotations
@@ -82,14 +83,14 @@ def _choose(samples: list[tuple[float, float]], label: str) -> Linearization:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Fit linearization curves on top of an existing profile")
-    p.add_argument("--backend", default="mediapipe", choices=["mediapipe", "rtmpose"])
+    p.add_argument("--backend", default="rtmpose", choices=["mediapipe", "rtmpose"])
     p.add_argument("--profile", required=True)
     p.add_argument("--camera", type=int, default=0)
     p.add_argument("--samples", type=int, default=30)
     p.add_argument("--countdown", type=float, default=5.0)
     p.add_argument("--rtmpose-model", default="balanced",
                    choices=["lightweight", "balanced", "performance"])
-    p.add_argument("--device", default="cpu", choices=["cpu", "cuda", "mps"])
+    p.add_argument("--device", default="cuda", choices=["cpu", "cuda", "mps"])
     return p.parse_args()
 
 

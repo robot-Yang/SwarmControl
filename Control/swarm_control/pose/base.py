@@ -12,6 +12,8 @@ class TwoHandPose:
 
     All coordinates are in pixel space of the input frame.
     `draw_payload` is opaque: only the originating backend's `draw()` reads it.
+    `head_yaw_deg` is optional — populated by backends that estimate head pose
+    (currently RTMPose Wholebody); other backends leave it None.
     """
 
     valid: bool
@@ -20,6 +22,7 @@ class TwoHandPose:
     left_size: float = 0.0
     right_size: float = 0.0
     confidence: float = 0.0
+    head_yaw_deg: Optional[float] = None
     draw_payload: Any = field(default=None, repr=False)
 
 

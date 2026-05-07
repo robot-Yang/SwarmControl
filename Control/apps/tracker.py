@@ -1,8 +1,8 @@
 """Run the live tracker → WebSocket bridge.
 
 Examples:
-    python -m apps.tracker --backend mediapipe --profile Gabriel
-    python -m apps.tracker --backend rtmpose   --profile Gabriel --device cuda
+    python -m apps.tracker --profile Gabriel                       # rtmpose + cuda (default)
+    python -m apps.tracker --backend mediapipe --profile Gabriel   # CPU fallback
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from swarm_control.ui import overlay
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Hand/body → drone swarm WebSocket bridge")
-    p.add_argument("--backend", default="mediapipe", choices=["mediapipe", "rtmpose"])
+    p.add_argument("--backend", default="rtmpose", choices=["mediapipe", "rtmpose"])
     p.add_argument("--profile", required=True, help="Calibration profile name (without .json)")
     p.add_argument("--camera", type=int, default=0)
     p.add_argument("--port", type=int, default=9052)
@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     # RTMPose-specific knobs
     p.add_argument("--rtmpose-model", default="balanced",
                    choices=["lightweight", "balanced", "performance"])
-    p.add_argument("--device", default="cpu", choices=["cpu", "cuda", "mps"])
+    p.add_argument("--device", default="cuda", choices=["cpu", "cuda", "mps"])
     p.add_argument("--no-debug-print", action="store_true")
     return p.parse_args()
 
@@ -72,6 +72,13 @@ def main() -> int:
             pose = backend.detect(frame)
             feats = extract_two_hand_features(pose)
 
+            # Yaw is independent of hand validity. Subtract the captured neutral
+            # so Unity receives a centered, degree-valued signal it can bound itself.
+            yaw_relative_deg: float | None = None
+            if pose.head_yaw_deg is not None:
+                offset = profile.neutral_yaw_deg if profile.neutral_yaw_deg is not None else 0.0
+                yaw_relative_deg = float(pose.head_yaw_deg) - float(offset)
+
             if feats is not None:
                 backend.draw(frame, pose)
                 d_norm, h_norm = normalizer.normalize(feats.distance, feats.height)
@@ -83,13 +90,16 @@ def main() -> int:
                     right_xy=pose.right_xy,
                     distance=d_norm,
                     height=h_norm,
+                    yaw=yaw_relative_deg,
                 )
 
+                yaw_label = f"yaw {yaw_relative_deg:+.1f}°" if yaw_relative_deg is not None else "yaw n/a"
                 overlay.draw_status_lines(
                     frame,
                     [
                         (f"spread {d_norm:+.3f}", (255, 0, 0), 0.7),
                         (f"height {h_norm:+.3f}", (0, 255, 255), 0.7),
+                        (yaw_label, (200, 100, 255), 0.7),
                         (f"raw {feats.distance:.1f}px / {feats.height:.1f}px", (200, 200, 200), 0.5),
                         (f"clients {ws.get_client_count()}", (0, 255, 0), 0.6),
                     ],
@@ -98,8 +108,9 @@ def main() -> int:
                 )
 
                 if not args.no_debug_print:
+                    yaw_str = f" yaw={yaw_relative_deg:+.1f}°" if yaw_relative_deg is not None else ""
                     print(
-                        f"[{backend.name}] dist={d_norm:+.3f} height={h_norm:+.3f} "
+                        f"[{backend.name}] dist={d_norm:+.3f} height={h_norm:+.3f}{yaw_str} "
                         f"clients={ws.get_client_count()}"
                     )
             else:
@@ -107,6 +118,7 @@ def main() -> int:
                     valid=False, backend=backend.name,
                     left_xy=None, right_xy=None,
                     distance=None, height=None,
+                    yaw=yaw_relative_deg,
                 )
                 overlay.draw_status_lines(
                     frame,

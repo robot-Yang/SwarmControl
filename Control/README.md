@@ -40,17 +40,17 @@ pip install -e ".[all]"              # both
 
 ## Daily use
 
+Defaults are RTMPose Body on CUDA. Pass `--backend mediapipe` for the CPU fallback.
+
 ```bash
 # 1) Calibrate once per user (and once per backend you plan to use)
-python -m apps.calibrate --backend mediapipe --profile alex
-python -m apps.calibrate --backend rtmpose   --profile alex --device cuda
+python -m apps.calibrate --profile alex
 
 # 2) Optional: improve linearity with 10 sample points
-python -m apps.linearize --backend mediapipe --profile alex
+python -m apps.linearize --profile alex
 
-# 3) Run the tracker (pick the backend at launch)
-python -m apps.tracker --backend mediapipe --profile alex
-python -m apps.tracker --backend rtmpose   --profile alex --device cuda
+# 3) Run the tracker
+python -m apps.tracker --profile alex
 
 # 4) Sanity-check from another terminal (no Unity needed)
 python -m apps.simulator

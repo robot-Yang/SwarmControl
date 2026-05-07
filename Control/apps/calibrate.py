@@ -1,8 +1,8 @@
 """Capture min/max/neutral spread+height samples and write a calibration profile.
 
 Examples:
-    python -m apps.calibrate --backend mediapipe --profile Gabriel
-    python -m apps.calibrate --backend rtmpose   --profile Gabriel --device cuda
+    python -m apps.calibrate --profile Gabriel                       # rtmpose + cuda (default)
+    python -m apps.calibrate --backend mediapipe --profile Gabriel   # CPU fallback
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import cv2
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from swarm_control.calibration import CalibrationProfile, capture_point
+from swarm_control.calibration import CalibrationProfile, capture_point, capture_head_yaw
 from swarm_control.calibration.profile import Linearization
 from swarm_control.pose import build_backend
 
@@ -31,7 +31,7 @@ STEPS = [
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Calibrate spread/height ranges for a user")
-    p.add_argument("--backend", default="mediapipe", choices=["mediapipe", "rtmpose"])
+    p.add_argument("--backend", default="rtmpose", choices=["mediapipe", "rtmpose"])
     p.add_argument("--profile", required=True)
     p.add_argument("--description", default="")
     p.add_argument("--camera", type=int, default=0)
@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--countdown", type=float, default=5.0)
     p.add_argument("--rtmpose-model", default="balanced",
                    choices=["lightweight", "balanced", "performance"])
-    p.add_argument("--device", default="cpu", choices=["cpu", "cuda", "mps"])
+    p.add_argument("--device", default="cuda", choices=["cpu", "cuda", "mps"])
     return p.parse_args()
 
 
@@ -61,6 +61,10 @@ def main() -> int:
     cv2.setWindowProperty(window, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
     captured: dict[str, float] = {}
+    neutral_yaw_deg: float | None = None
+    # +1 step on rtmpose for yaw neutral capture; mediapipe has no face landmarks.
+    yaw_capture_enabled = backend.name == "rtmpose"
+    total_steps = len(STEPS) + (1 if yaw_capture_enabled else 0)
     try:
         for i, (axis, key, title, instruction) in enumerate(STEPS, start=1):
             value = capture_point(
@@ -71,13 +75,30 @@ def main() -> int:
                 samples=args.samples,
                 countdown_seconds=args.countdown,
                 window_name=window,
-                progress_text=f"step {i}/{len(STEPS)}",
+                progress_text=f"step {i}/{total_steps}",
             )
             if value is None:
                 print("calibration cancelled")
                 return 1
             captured[key] = value
             print(f"  {key} = {value:.1f} px")
+
+        if yaw_capture_enabled:
+            i = len(STEPS) + 1
+            yaw = capture_head_yaw(
+                cap, backend,
+                title="NEUTRAL HEAD YAW",
+                instruction="look straight at the screen",
+                samples=args.samples,
+                countdown_seconds=args.countdown,
+                window_name=window,
+                progress_text=f"step {i}/{total_steps}",
+            )
+            if yaw is None:
+                print("yaw calibration cancelled — saving without yaw neutral")
+            else:
+                neutral_yaw_deg = yaw
+                print(f"  neutral_yaw_deg = {yaw:+.2f} deg")
     finally:
         cap.release()
         cv2.destroyAllWindows()
@@ -103,6 +124,7 @@ def main() -> int:
         horizontal_linearization=Linearization(),
         vertical_linearization=Linearization(),
         backend=backend.name,
+        neutral_yaw_deg=neutral_yaw_deg,
     )
     path = profile.save()
     print(f"saved → {path}")
