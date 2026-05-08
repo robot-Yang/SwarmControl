@@ -23,10 +23,6 @@ public class IMUYawInput : MonoBehaviour
     [Tooltip("Invert yaw direction (left becomes right)")]
     public bool invertYaw = false;
 
-    [Header("Calibration")]
-    [Tooltip("Press this key to calibrate neutral yaw position")]
-    public KeyCode calibrateKey = KeyCode.K;
-
     [Header("Auto-Calibration")]
     [Tooltip("Automatically calibrate neutral position on Start (not needed - OpenZenMoveObject handles all calibration)")]
     public bool autoCalibrateOnStart = false;
@@ -58,17 +54,16 @@ public class IMUYawInput : MonoBehaviour
 
     void Update()
     {
-        // Manual calibration with K key (optional second-layer adjustment)
-        if (Input.GetKeyDown(calibrateKey))
-        {
-            CalibrateNeutral();
-        }
+        // Calibration is triggered by the global C key via
+        // InputFusionManager.PerformCalibration() → CalibrateNeutral().
+        // No local key binding here — single source of truth.
 
         if (IsAvailable)
         {
-            // Get sensor angles (already calibrated by OpenZenMoveObject)
-            Vector3 angles = openZenIMU.SensorEulerAnglesDirect;
-            
+            // Subtract the calibrated neutral so the rotation output is anchored
+            // to the participant's "facing-forward" pose at calibration time.
+            Vector3 angles = openZenIMU.SensorEulerAnglesDirect - _calibrationOffset;
+
             YawRotationRate = ConvertYawToRotation(angles);
         }
         else
