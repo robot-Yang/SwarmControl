@@ -2611,8 +2611,8 @@ MonoBehaviour:
   useArmIMUForSpreadHeight: 0
   useMetaHandsForHeight: 0
   useMetaHandsForSpread: 0
-  useControllersForHeight: 1
-  useControllersForSpread: 1
+  useControllersForHeight: 0
+  useControllersForSpread: 0
   enableTraditionalFallback: 1
   forwardMaxSpeed: 1
   backwardMaxSpeed: 1
@@ -2959,7 +2959,6 @@ MonoBehaviour:
   yawDeadzone: 5
   maxRotationSpeed: 2
   invertYaw: 0
-  calibrateKey: 107
   autoCalibrateOnStart: 0
   showDebugInfo: 0
 --- !u!114 &1134678139
@@ -3081,11 +3080,13 @@ MonoBehaviour:
   useGlobalHeading: 1
   headingSmooth: 5
   autoSwitchFrontmost: 1
+  viewpointMode: 0
   checkInterval: 0.15
   maxViewAngleDeg: 360
   minForwardDist: 0.01
   minHoldTime: 0.5
   minSwitchCooldown: 1
+  swapBackCooldown: 2
   restrictToMainGroup: 1
   groupRefreshInterval: 0.5
   allowManualSelection: 0
@@ -4691,11 +4692,13 @@ MonoBehaviour:
   useGlobalHeading: 1
   headingSmooth: 5
   autoSwitchFrontmost: 1
+  viewpointMode: 0
   checkInterval: 0.15
   maxViewAngleDeg: 360
   minForwardDist: 0.01
   minHoldTime: 0.5
   minSwitchCooldown: 1
+  swapBackCooldown: 2
   restrictToMainGroup: 1
   groupRefreshInterval: 0.5
   allowManualSelection: 0
@@ -4958,6 +4961,9 @@ MonoBehaviour:
   useXZDistance: 1
   runLabelName: Run
   singleRunMode: 1
+  fusionManager: {fileID: 0}
+  webSocketClient: {fileID: 0}
+  logInputs: 1
   embodiedDroneOverride: {fileID: 0}
   embodiedTag: Embodied
   embodiedName: EmbodiedDrone

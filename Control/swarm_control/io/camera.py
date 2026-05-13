@@ -13,6 +13,7 @@ as cv2.VideoCapture for the calls our apps make.
 
 from __future__ import annotations
 
+import sys
 import threading
 from typing import Optional
 
@@ -31,7 +32,11 @@ class ThreadedCamera:
         height: int = 360,
         fps: int = 60,
     ) -> None:
-        self._cap = cv2.VideoCapture(source)
+        # Explicit DirectShow backend on Windows — matches the camera probe and
+        # avoids cases where Media Foundation (the default) silently fails to
+        # produce frames for some built-in webcams.
+        backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY
+        self._cap = cv2.VideoCapture(source, backend)
         if self._cap.isOpened():
             # Set requested camera mode (driver may snap to nearest supported).
             self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)

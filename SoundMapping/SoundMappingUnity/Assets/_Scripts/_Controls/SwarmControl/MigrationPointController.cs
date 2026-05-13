@@ -51,20 +51,29 @@ public class MigrationPointController : MonoBehaviour
     private Vector3 _swarmHeading = Vector3.forward; // world-space, horizontal
     private bool _headingInitialized = false;
 
+    public enum ViewpointMode { Frontmost, Lastmost }
+
     // === Auto-frontmost switching (config) ===
     [Header("Auto Frontmost Switching")]
     public bool autoSwitchFrontmost = true;   // turn on/off
+    [Tooltip("Frontmost = drone furthest along the embodied drone's facing direction. Lastmost = furthest in the opposite direction.")]
+    public ViewpointMode viewpointMode = ViewpointMode.Frontmost;
     public float checkInterval = 0.15f;       // seconds between checks
     public float maxViewAngleDeg = 360f;       // view cone half-angle
     public float minForwardDist = 0.01f;       // must be at least this far ahead
     public float minHoldTime = 0.5f;          // must stay best for this long before switching
     public float minSwitchCooldown = 1.0f;    // cooldown after a switch to avoid flip-flop
 
+    [Tooltip("Block swapping back to the just-departed drone for this many seconds — prevents A↔B ping-pong when drones overshoot near the embodied position.")]
+    public float swapBackCooldown = 2.0f;
+
     // === Auto-frontmost switching (runtime state) ===
     float _nextCheckTime = 0f;
     GameObject _candidateFrontmost = null;
     float _candidateSinceTime = 0f;
     float _lastSwitchTime = -999f;
+    GameObject _recentlyDepartedDrone = null;
+    float _recentlyDepartedExpiry = 0f;
 
     [Header("Group Filtering")]
     public bool restrictToMainGroup = true;   // only switch within the largest connected subnetwork
@@ -145,7 +154,8 @@ public class MigrationPointController : MonoBehaviour
         if (reference == null || swarmModel.swarmHolder == null) return null;
 
         Vector3 refPos = reference.position;
-        Vector3 fwd    = reference.forward;
+        // Lastmost mode flips the search axis — every downstream check stays the same.
+        Vector3 fwd    = (viewpointMode == ViewpointMode.Lastmost) ? -reference.forward : reference.forward;
 
         // Baseline = current embodied drone's forward distance (if any)
         float baselineForward = float.NegativeInfinity;
@@ -164,6 +174,10 @@ public class MigrationPointController : MonoBehaviour
 
             // Skip the currently embodied drone
             if (CameraMovement.embodiedDrone != null && go == CameraMovement.embodiedDrone)
+                continue;
+
+            // Block the drone we just departed from (prevents A->B->A ping-pong when drones overshoot)
+            if (_recentlyDepartedDrone != null && go == _recentlyDepartedDrone && Time.time < _recentlyDepartedExpiry)
                 continue;
 
             // Filter by main group if provided
@@ -377,9 +391,11 @@ public class MigrationPointController : MonoBehaviour
         {
             if (_candidateFrontmost != CameraMovement.embodiedDrone)
             {
+                _recentlyDepartedDrone = CameraMovement.embodiedDrone;
+                _recentlyDepartedExpiry = Time.time + swapBackCooldown;
                 CameraMovement.nextEmbodiedDrone = _candidateFrontmost;
                 _lastSwitchTime = Time.time;
-                Debug.Log($"[AutoSwitch] Next embodied (frontmost/main-group): " +
+                Debug.Log($"[AutoSwitch] Next embodied ({viewpointMode}/main-group): " +
                         _candidateFrontmost.GetComponent<DroneController>().droneFake.id);
             }
             _candidateSinceTime = Time.time;
@@ -471,6 +487,10 @@ public class MigrationPointController : MonoBehaviour
                 {
                     Dictionary<GameObject, float> scores = new Dictionary<GameObject, float>();
 
+                    Vector3 selFwd = (viewpointMode == ViewpointMode.Lastmost)
+                        ? -CameraMovement.embodiedDrone.transform.forward
+                        :  CameraMovement.embodiedDrone.transform.forward;
+
                     foreach(Transform drone in swarmModel.swarmHolder.transform)
                     {
                         if(drone.gameObject == CameraMovement.embodiedDrone)
@@ -480,7 +500,7 @@ public class MigrationPointController : MonoBehaviour
 
 
                         Vector3 diff = drone.position - CameraMovement.embodiedDrone.transform.position;
-                        float score = Vector3.Dot(diff, CameraMovement.embodiedDrone.transform.forward);
+                        float score = Vector3.Dot(diff, selFwd);
 
                         if(score > 0.5)
                         {

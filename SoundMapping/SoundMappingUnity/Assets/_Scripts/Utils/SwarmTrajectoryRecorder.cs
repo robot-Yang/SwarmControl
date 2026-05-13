@@ -106,6 +106,15 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     public bool singleRunMode = true;
 
 
+    [Header("Input Logging")]
+    [Tooltip("InputFusionManager — every input source is read through this each sample. Auto-found if empty.")]
+    public InputFusionManager fusionManager;
+    [Tooltip("WebSocketClient — logs raw values from the Python tracker. Auto-found if empty. Optional.")]
+    public WebSocketClient webSocketClient;
+    [Tooltip("If false, the inputs[] block is omitted from saved files (saves disk and JSON parse time).")]
+    public bool logInputs = true;
+
+
     [Header("Embodied drone labeling")]
     [Tooltip("If set, this transform is treated as the embodied drone.")]
     public Transform embodiedDroneOverride;
@@ -165,6 +174,9 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     // --- Crash event buffer ---
     private readonly List<CrashEvent> _crashBuffer = new List<CrashEvent>();
 
+    // --- Input snapshot buffer ---
+    private readonly List<InputFrame> _inputBuffer = new List<InputFrame>();
+
 
     // -------------------- Data types --------------------
     [Serializable]
@@ -203,6 +215,51 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     }
 
 
+    /// <summary>
+    /// Per-frame snapshot of every input signal flowing into the swarm.
+    /// Sampled at the same cadence as TrajFrame so analysis can join on `t`.
+    /// Unavailable / unassigned sources record NaN so pandas can distinguish
+    /// "source not present" from "source present, reading 0".
+    ///
+    /// Field naming: `f*` = fused output (what InputFusionManager actually
+    /// produced this frame). Source-prefixed fields are raw per-source readings.
+    /// </summary>
+    [Serializable]
+    public struct InputFrame
+    {
+        public float t;
+
+        // Fused outputs (what drove the swarm this frame)
+        public float fmx, fmy, fmz;   // SwarmMovement (XYZ)
+        public float fs;              // SwarmSpread
+        public float fr;              // CameraRotation
+        public byte sabs;             // 1 if spread is absolute target, 0 if rate
+
+        // TraditionalInput (joystick / keyboard)
+        public float trad_mx, trad_my;  // MovementInput.x, .y
+        public float trad_h;            // HeightInput
+        public float trad_s;            // SpreadInput
+        public float trad_r;            // RotationInput
+
+        // ChestIMU
+        public float imu_mx, imu_mz;  // IMUMovementInput.MovementVector.x, .z
+        public float imu_y;           // IMUYawInput.YawRotationRate
+
+        // ArmIMU (forearm sensors); reflects HandIMUFusion when present
+        public float arm_h, arm_s;    // HeightControl / SpreadControl
+
+        // Meta Quest
+        public float mq_y;            // HeadsetYawInput.RotationControl
+        public float mqh_h, mqh_s;    // HandHeightInput / HandSpreadInput
+        public float ctl_h, ctl_s;    // ControllerHeightInput / ControllerSpreadInput
+
+        // Webcam pose tracking — Unity-side processed values
+        public float pose_h, pose_s, pose_y;
+        // Raw WebSocket values straight from Python (pre-Unity processing)
+        public float ws_d, ws_h, ws_y;
+    }
+
+
     [Serializable]
     public class TrialWindow
     {
@@ -237,6 +294,11 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         // --- Crashes ---
         public int crashCount;                  // total crashes during the run (== crashes.Count)
         public List<CrashEvent> crashes = new List<CrashEvent>();
+
+        // --- Per-frame input snapshots ---
+        // Time-aligned with `trajectories[].frames`: same `t` axis, same cadence
+        // (governed by sampleHz / recordHz). Empty when logInputs is false.
+        public List<InputFrame> inputs = new List<InputFrame>();
     }
 
 
@@ -276,7 +338,18 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         TryFindSwarmRootNow();
         CollectDrones();
         RefreshEmbodiedLabeling();
+        EnsureInputRefs();
         _samplingEnabled = !waitForDronesToStart || _droneTransforms.Count > 0;
+    }
+
+    /// <summary>
+    /// Resolve InputFusionManager and WebSocketClient if the Inspector left them
+    /// empty. Cheap to call repeatedly; bails early once both are set.
+    /// </summary>
+    private void EnsureInputRefs()
+    {
+        if (fusionManager == null) fusionManager = FindObjectOfType<InputFusionManager>();
+        if (webSocketClient == null) webSocketClient = FindObjectOfType<WebSocketClient>();
     }
 
 
@@ -492,6 +565,9 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 
         // Reset crash buffer for new run
         _crashBuffer.Clear();
+
+        // Reset input buffer for new run
+        _inputBuffer.Clear();
         
 #if UNITY_EDITOR
         Debug.Log($"[SwarmTrajectoryRecorder] Trial START '{_openTrial.label}' at t={_openTrial.startGameTime:F2}s");
@@ -538,6 +614,9 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         if (_ensureSwarmCoro != null) StopCoroutine(_ensureSwarmCoro);
         _ensureSwarmCoro = StartCoroutine(EnsureSwarmAvailable());
 
+        // Resolve input-logging targets in case the new scene brought them in.
+        EnsureInputRefs();
+
 
         _accum = _autosaveTimer = 0f;
         _recordAccum = 0f; _sampleIndex = 0;
@@ -568,6 +647,7 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         _runFinalized = false; // new file can have its own single run
 
         _crashBuffer.Clear();
+        _inputBuffer.Clear();
 
         _embodiedTransform = null;
         _embodiedStableId = int.MinValue;
@@ -928,6 +1008,106 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
                 e = (byte)((ids[i] == _embodiedStableId) ? 1 : 0)
             });
         }
+
+        // Time-aligned input snapshot. Captured every recorded sample so the
+        // analyst can join inputs[] and trajectories[].frames on `t`.
+        if (logInputs)
+        {
+            EnsureInputRefs();  // additive scenes may have brought refs in late
+            if (fusionManager != null) _inputBuffer.Add(SnapshotInputs(t));
+        }
+    }
+
+    /// <summary>
+    /// Build one InputFrame from the current state of every input source the
+    /// fusion manager knows about. Unavailable sources record NaN so analysis
+    /// can distinguish "source not present" from "source present, reading 0".
+    /// </summary>
+    private InputFrame SnapshotInputs(float t)
+    {
+        const float N = float.NaN;
+        var fm = fusionManager;
+
+        var f = new InputFrame
+        {
+            t = t,
+            // Fused outputs
+            fmx = fm.SwarmMovement.x, fmy = fm.SwarmMovement.y, fmz = fm.SwarmMovement.z,
+            fs  = fm.SwarmSpread,
+            fr  = fm.CameraRotation,
+            sabs = (byte)(fm.IsSpreadAbsolute ? 1 : 0),
+            // Source defaults — overwritten below if the source is present.
+            trad_mx = N, trad_my = N, trad_h = N, trad_s = N, trad_r = N,
+            imu_mx = N, imu_mz = N, imu_y = N,
+            arm_h = N, arm_s = N,
+            mq_y = N,
+            mqh_h = N, mqh_s = N,
+            ctl_h = N, ctl_s = N,
+            pose_h = N, pose_s = N, pose_y = N,
+            ws_d = N, ws_h = N, ws_y = N,
+        };
+
+        // Traditional joystick / keyboard — log even when not selected as the
+        // active source, so we can see what the user *would* have done.
+        if (fm.traditionalInput != null)
+        {
+            f.trad_mx = fm.traditionalInput.MovementInput.x;
+            f.trad_my = fm.traditionalInput.MovementInput.y;
+            f.trad_h  = fm.traditionalInput.HeightInput;
+            f.trad_s  = fm.traditionalInput.SpreadInput;
+            f.trad_r  = fm.traditionalInput.RotationInput;
+        }
+
+        // Chest IMU
+        if (fm.imuMovementInput != null && fm.imuMovementInput.IsAvailable)
+        {
+            f.imu_mx = fm.imuMovementInput.MovementVector.x;
+            f.imu_mz = fm.imuMovementInput.MovementVector.z;
+        }
+        if (fm.imuYawInput != null && fm.imuYawInput.IsAvailable)
+            f.imu_y = fm.imuYawInput.YawRotationRate;
+
+        // Forearm IMUs — prefer fusion output when present (it forwards to armIMU).
+        if (fm.handIMUFusion != null && fm.handIMUFusion.IsAvailable)
+        {
+            f.arm_h = fm.handIMUFusion.HeightControl;
+            f.arm_s = fm.handIMUFusion.SpreadControl;
+        }
+        else if (fm.armIMUInput != null && fm.armIMUInput.IsAvailable)
+        {
+            f.arm_h = fm.armIMUInput.HeightControl;
+            f.arm_s = fm.armIMUInput.SpreadControl;
+        }
+
+        // Meta Quest
+        if (fm.headsetYawInput != null && fm.headsetYawInput.IsAvailable)
+            f.mq_y = fm.headsetYawInput.RotationControl;
+        if (fm.handHeightInput != null && fm.handHeightInput.IsAvailable)
+            f.mqh_h = fm.handHeightInput.HeightControl;
+        if (fm.handSpreadInput != null && fm.handSpreadInput.IsAvailable)
+            f.mqh_s = fm.handSpreadInput.SpreadControl;
+        if (fm.controllerHeightInput != null && fm.controllerHeightInput.IsAvailable)
+            f.ctl_h = fm.controllerHeightInput.HeightControl;
+        if (fm.controllerSpreadInput != null && fm.controllerSpreadInput.IsAvailable)
+            f.ctl_s = fm.controllerSpreadInput.SpreadControl;
+
+        // Webcam pose — Unity-side processed values
+        if (fm.poseHeightInput != null && fm.poseHeightInput.IsAvailable)
+            f.pose_h = fm.poseHeightInput.HeightControl;
+        if (fm.poseSpreadInput != null && fm.poseSpreadInput.IsAvailable)
+            f.pose_s = fm.poseSpreadInput.SpreadControl;
+        if (fm.poseYawInput != null && fm.poseYawInput.IsAvailable)
+            f.pose_y = fm.poseYawInput.YawRate;
+
+        // Raw values straight from the Python tracker, pre-Unity processing.
+        if (webSocketClient != null && webSocketClient.IsConnected)
+        {
+            f.ws_d = webSocketClient.HandDistance;
+            f.ws_h = webSocketClient.HandHeight;
+            f.ws_y = webSocketClient.HeadYawDeg;
+        }
+
+        return f;
     }
 
 
@@ -1113,6 +1293,9 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
             // Crashes — full event list, plus aggregate count for quick scanning
             crashCount = _crashBuffer.Count,
             crashes = new List<CrashEvent>(_crashBuffer),
+
+            // Per-frame input snapshots (empty list when logInputs=false)
+            inputs = new List<InputFrame>(_inputBuffer),
         };
 
 
