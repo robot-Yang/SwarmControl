@@ -1,9 +1,13 @@
 using UnityEngine;
 using UnityEditor;
+using System.IO;
 
 [CustomEditor(typeof(SceneSelectorScript))]
 public class SceneSelectorScriptEditor : Editor
 {
+    private const string SourceScenePath = "Assets/Scenes/SceneStudy/FPVObs_3d.unity";
+    private const string MainScenePath = "Assets/Scenes/SceneStudy/Main.unity";
+
     public override void OnInspectorGUI()
     {
         // Draw the default inspector fields (any public fields, etc.)
@@ -57,6 +61,11 @@ public class SceneSelectorScriptEditor : Editor
 
         EditorGUILayout.EndHorizontal();
 
+        if (GUILayout.Button("Copy FPVObs_3d as Main"))
+        {
+            CopyFPVObs3dAsMain();
+        }
+
         EditorGUILayout.EndVertical();
 
 
@@ -66,5 +75,37 @@ public class SceneSelectorScriptEditor : Editor
         //
 
 
+    }
+
+    private static void CopyFPVObs3dAsMain()
+    {
+        if (!File.Exists(SourceScenePath))
+        {
+            EditorUtility.DisplayDialog("Copy FPVObs_3d as Main", $"Source scene not found:\n{SourceScenePath}", "OK");
+            return;
+        }
+
+        if (!File.Exists(MainScenePath))
+        {
+            EditorUtility.DisplayDialog("Copy FPVObs_3d as Main", $"Destination scene not found:\n{MainScenePath}", "OK");
+            return;
+        }
+
+        bool shouldCopy = EditorUtility.DisplayDialog(
+            "Copy FPVObs_3d as Main",
+            $"Overwrite {MainScenePath} with {SourceScenePath}?",
+            "Copy",
+            "Cancel");
+
+        if (!shouldCopy)
+        {
+            return;
+        }
+
+        File.Copy(SourceScenePath, MainScenePath, true);
+        AssetDatabase.ImportAsset(MainScenePath);
+        AssetDatabase.Refresh();
+
+        Debug.Log($"Copied {SourceScenePath} to {MainScenePath}");
     }
 }
