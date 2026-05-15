@@ -46,6 +46,8 @@ public class TestCourse : MonoBehaviour
     [Header("Gap Positioning")]
     public float firstGapZOffset = 0f;
     public float gapSpacing = 50f;
+    public bool useFixedTotalGapCenterDistance = false;
+    public float targetTotalGapCenterDistance = 300f;
     public float startLineGapOffset = 10f;
     public float finishLineGapOffset = 10f;
 
@@ -474,8 +476,255 @@ public class TestCourse : MonoBehaviour
             CreateGap(gc.transform, i);
 
         controller.Apply();
+
+        if (useFixedTotalGapCenterDistance)
+        {
+            AdjustGapCentersForTargetTotalDistance(controller, targetTotalGapCenterDistance);
+            controller.Apply();
+        }
+
         AlignTimingLinesToGeneratedGaps(controller);
+        LogGapDistanceSummary(controller);
         Debug.Log("[TestCourse] Gaps generated and layout applied.");
+    }
+
+    private void AdjustGapCentersForTargetTotalDistance(GapsController controller, float targetTotalDistance)
+    {
+        Gap[] gaps = controller.GetComponentsInChildren<Gap>(includeInactive: true);
+        if (gaps.Length < 2)
+            return;
+
+        System.Array.Sort(gaps, (a, b) => a.transform.localPosition.z.CompareTo(b.transform.localPosition.z));
+
+        float fixedZSpacing = gapSpacing;
+        float minTotalDistance = TotalGapCenterDistanceForSpacing(gaps, fixedZSpacing, 0f);
+        float estimatedMaxTotalDistance = EstimateMaxTotalGapCenterDistance(gaps.Length, fixedZSpacing);
+        if (targetTotalDistance <= minTotalDistance)
+        {
+            Debug.LogWarning(
+                $"[TestCourse] Target gap center distance {targetTotalDistance:F2} is below the minimum possible " +
+                $"{minTotalDistance:F2} with local gapSpacing={fixedZSpacing:F2}. Keeping generated centers.");
+            return;
+        }
+        if (targetTotalDistance > estimatedMaxTotalDistance)
+        {
+            Debug.LogWarning(
+                $"[TestCourse] Target gap center distance {targetTotalDistance:F2} is above the estimated maximum " +
+                $"{estimatedMaxTotalDistance:F2} for the current XY ranges. " +
+                "Increase randomGapCenterXRange/randomGapCenterYRange or lower the target.");
+        }
+
+        if (randomizeGapCenters)
+        {
+            RandomizeCentersUntilAtLeastTarget(gaps, fixedZSpacing, targetTotalDistance);
+        }
+
+        float currentTotalDistance = TotalGapCenterDistanceForSpacing(gaps, fixedZSpacing, 1f);
+        if (currentTotalDistance < targetTotalDistance)
+        {
+            Debug.LogWarning(
+                $"[TestCourse] Could only reach local gap center distance {currentTotalDistance:F2}, " +
+                $"below target {targetTotalDistance:F2}. Increase randomGapCenterXRange/randomGapCenterYRange.");
+            return;
+        }
+
+        Vector2[] originalCenters = GetGapCenters(gaps);
+        Vector2 anchor = originalCenters[0];
+        float low = 0f;
+        float high = 1f;
+        for (int i = 0; i < 40; i++)
+        {
+            float mid = (low + high) * 0.5f;
+            if (TotalGapCenterDistanceForScaledCenters(originalCenters, anchor, fixedZSpacing, mid) < targetTotalDistance)
+                low = mid;
+            else
+                high = mid;
+        }
+
+        ApplyScaledCenters(gaps, originalCenters, anchor, high);
+    }
+
+    private void RandomizeCentersUntilAtLeastTarget(Gap[] gaps, float fixedZSpacing, float targetTotalDistance)
+    {
+        const int maxAttempts = 200;
+        float bestTotalDistance = TotalGapCenterDistanceForSpacing(gaps, fixedZSpacing, 1f);
+        Vector2[] bestCenters = GetGapCenters(gaps);
+
+        for (int attempt = 0; attempt < maxAttempts && bestTotalDistance < targetTotalDistance; attempt++)
+        {
+            for (int i = 0; i < gaps.Length; i++)
+            {
+                gaps[i].gapCenterX = RandomInRange(randomGapCenterXRange);
+                gaps[i].gapCenterY = RandomInRange(GetSafeGapCenterYRange());
+                ClampGapCenter(gaps[i]);
+            }
+
+            float totalDistance = TotalGapCenterDistanceForSpacing(gaps, fixedZSpacing, 1f);
+            if (totalDistance > bestTotalDistance)
+            {
+                bestTotalDistance = totalDistance;
+                bestCenters = GetGapCenters(gaps);
+            }
+        }
+
+        ApplyCenters(gaps, bestCenters);
+    }
+
+    private float TotalGapCenterDistanceForSpacing(Gap[] gaps, float spacing, float xyScale)
+    {
+        float totalDistance = 0f;
+        for (int i = 0; i < gaps.Length - 1; i++)
+        {
+            Vector2 currentCenter = new Vector2(gaps[i].gapCenterX, gaps[i].gapCenterY);
+            Vector2 nextCenter = new Vector2(gaps[i + 1].gapCenterX, gaps[i + 1].gapCenterY);
+            Vector2 centerDelta = (nextCenter - currentCenter) * xyScale;
+            totalDistance += GapCenterDeltaMagnitude(centerDelta, spacing);
+        }
+
+        return totalDistance;
+    }
+
+    private float TotalGapCenterDistanceForScaledCenters(Vector2[] originalCenters, Vector2 anchor, float spacing, float scale)
+    {
+        float totalDistance = 0f;
+        for (int i = 0; i < originalCenters.Length - 1; i++)
+        {
+            Vector2 currentCenter = anchor + ((originalCenters[i] - anchor) * scale);
+            Vector2 nextCenter = anchor + ((originalCenters[i + 1] - anchor) * scale);
+            Vector2 centerDelta = nextCenter - currentCenter;
+            totalDistance += GapCenterDeltaMagnitude(centerDelta, spacing);
+        }
+
+        return totalDistance;
+    }
+
+    private float GapCenterDeltaMagnitude(Vector2 centerDelta, float spacing)
+    {
+        return new Vector3(centerDelta.x, centerDelta.y, spacing).magnitude;
+    }
+
+    private float EstimateMaxTotalGapCenterDistance(int gapCount, float spacing)
+    {
+        if (gapCount < 2)
+            return 0f;
+
+        Vector2 xRange = NormalizeRange(randomGapCenterXRange);
+        Vector2 yRange = NormalizeRange(GetSafeGapCenterYRange());
+        ClampEstimatedCenterRanges(ref xRange, ref yRange);
+        Vector2 maxCenterDelta = new Vector2(xRange.y - xRange.x, yRange.y - yRange.x);
+        return (gapCount - 1) * GapCenterDeltaMagnitude(maxCenterDelta, spacing);
+    }
+
+    private void ClampEstimatedCenterRanges(ref Vector2 xRange, ref Vector2 yRange)
+    {
+        float centerWidth = generate3DGaps ? Mathf.Max(0f, wallHeight) : maxSquareGapSize;
+        float maxCenterX = (corridorWidth * 0.5f) - (centerWidth * 0.5f);
+        xRange.x = Mathf.Clamp(xRange.x, -maxCenterX, maxCenterX);
+        xRange.y = Mathf.Clamp(xRange.y, -maxCenterX, maxCenterX);
+
+        if (generate3DGaps)
+        {
+            float minCenterY = Mathf.Max(0f, wallHeight) * 0.5f;
+            yRange.x = Mathf.Max(yRange.x, minCenterY);
+            yRange.y = Mathf.Max(yRange.y, yRange.x);
+        }
+    }
+
+    private void ClampGapCenter(Gap gap)
+    {
+        if (gap == null)
+            return;
+
+        GapsController controller = gap.GetComponentInParent<GapsController>();
+        if (controller == null)
+            return;
+
+        float halfCorridor = controller.corridorWidth * 0.5f;
+        float wallSize = gap.useSquareHole
+            ? Mathf.Max(0f, gap.squareWallSize)
+            : (gap.leftWall != null ? Mathf.Max(0f, gap.leftWall.localScale.y) : 0f);
+        if (wallSize <= 0f)
+            return;
+
+        float centerWidth = gap.useSquareHole ? wallSize : gap.gapSize;
+        float maxCenterX = halfCorridor - (centerWidth * 0.5f);
+        gap.gapCenterX = Mathf.Clamp(gap.gapCenterX, -maxCenterX, maxCenterX);
+
+        float halfGapHeight = gap.gapHeight * 0.5f;
+        if (gap.useSquareHole)
+            gap.gapCenterY = Mathf.Max(gap.gapCenterY, wallSize * 0.5f);
+        else
+            gap.gapCenterY = Mathf.Clamp(gap.gapCenterY, halfGapHeight, wallSize - halfGapHeight);
+    }
+
+    private Vector2 NormalizeRange(Vector2 range)
+    {
+        return new Vector2(Mathf.Min(range.x, range.y), Mathf.Max(range.x, range.y));
+    }
+
+    private Vector2[] GetGapCenters(Gap[] gaps)
+    {
+        Vector2[] centers = new Vector2[gaps.Length];
+        for (int i = 0; i < gaps.Length; i++)
+        {
+            centers[i] = new Vector2(gaps[i].gapCenterX, gaps[i].gapCenterY);
+        }
+        return centers;
+    }
+
+    private void ApplyScaledCenters(Gap[] gaps, Vector2[] originalCenters, Vector2 anchor, float scale)
+    {
+        for (int i = 0; i < gaps.Length; i++)
+        {
+            Vector2 center = anchor + ((originalCenters[i] - anchor) * scale);
+            gaps[i].gapCenterX = center.x;
+            gaps[i].gapCenterY = center.y;
+        }
+    }
+
+    private void ApplyCenters(Gap[] gaps, Vector2[] centers)
+    {
+        for (int i = 0; i < gaps.Length && i < centers.Length; i++)
+        {
+            gaps[i].gapCenterX = centers[i].x;
+            gaps[i].gapCenterY = centers[i].y;
+        }
+    }
+
+    private void LogGapDistanceSummary(GapsController controller)
+    {
+        if (controller == null)
+            return;
+
+        Gap[] gaps = controller.GetComponentsInChildren<Gap>(includeInactive: true);
+        if (gaps.Length < 2)
+        {
+            Debug.Log("[TestCourse] Gap distance summary: fewer than 2 gaps.");
+            return;
+        }
+
+        System.Array.Sort(gaps, (a, b) => a.transform.position.z.CompareTo(b.transform.position.z));
+
+        float totalDistance = 0f;
+        List<string> segments = new List<string>();
+        for (int i = 0; i < gaps.Length - 1; i++)
+        {
+            Vector3 currentCenter = GapCenterWorldPosition(gaps[i]);
+            Vector3 nextCenter = GapCenterWorldPosition(gaps[i + 1]);
+            float distance = Vector3.Distance(currentCenter, nextCenter);
+            totalDistance += distance;
+            segments.Add($"Gap {i + 1}->{i + 2}: {distance:F2}");
+        }
+
+        Debug.Log($"[TestCourse] Gap distance summary: total={totalDistance:F2}; {string.Join(", ", segments)}");
+    }
+
+    private Vector3 GapCenterWorldPosition(Gap gap)
+    {
+        if (gap == null)
+            return Vector3.zero;
+
+        return gap.transform.TransformPoint(new Vector3(gap.gapCenterX, gap.gapCenterY, 0f));
     }
 
     private void CreateGap(Transform parent, int index)
