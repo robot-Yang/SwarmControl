@@ -5,7 +5,9 @@ using System.IO;
 [CustomEditor(typeof(SceneSelectorScript))]
 public class SceneSelectorScriptEditor : Editor
 {
-    private const string SourceScenePath = "Assets/Scenes/SceneStudy/FPVObs_3d.unity";
+    private const string FpvObs3dScenePath = "Assets/Scenes/SceneStudy/FPVObs_3d.unity";
+    private const string Trial1ScenePath = "Assets/Scenes/SceneStudy/trial_1.unity";
+    private const string Trial2ScenePath = "Assets/Scenes/SceneStudy/trial_2.unity";
     private const string MainScenePath = "Assets/Scenes/SceneStudy/Main.unity";
 
     public override void OnInspectorGUI()
@@ -63,7 +65,17 @@ public class SceneSelectorScriptEditor : Editor
 
         if (GUILayout.Button("Copy FPVObs_3d as Main"))
         {
-            CopyFPVObs3dAsMain();
+            CopySceneAsMain(FpvObs3dScenePath, "Copy FPVObs_3d as Main");
+        }
+
+        if (GUILayout.Button("Copy trial_1 as Main"))
+        {
+            CopySceneAsMain(Trial1ScenePath, "Copy trial_1 as Main");
+        }
+
+        if (GUILayout.Button("Copy trial_2 as Main"))
+        {
+            CopySceneAsMain(Trial2ScenePath, "Copy trial_2 as Main");
         }
 
         EditorGUILayout.EndVertical();
@@ -77,23 +89,25 @@ public class SceneSelectorScriptEditor : Editor
 
     }
 
-    private static void CopyFPVObs3dAsMain()
+    // Overwrites Main.unity with the contents of the given source scene file.
+    // dialogTitle is used as the title for the confirmation / error popups.
+    private static void CopySceneAsMain(string sourceScenePath, string dialogTitle)
     {
-        if (!File.Exists(SourceScenePath))
+        if (!File.Exists(sourceScenePath))
         {
-            EditorUtility.DisplayDialog("Copy FPVObs_3d as Main", $"Source scene not found:\n{SourceScenePath}", "OK");
+            EditorUtility.DisplayDialog(dialogTitle, $"Source scene not found:\n{sourceScenePath}", "OK");
             return;
         }
 
         if (!File.Exists(MainScenePath))
         {
-            EditorUtility.DisplayDialog("Copy FPVObs_3d as Main", $"Destination scene not found:\n{MainScenePath}", "OK");
+            EditorUtility.DisplayDialog(dialogTitle, $"Destination scene not found:\n{MainScenePath}", "OK");
             return;
         }
 
         bool shouldCopy = EditorUtility.DisplayDialog(
-            "Copy FPVObs_3d as Main",
-            $"Overwrite {MainScenePath} with {SourceScenePath}?",
+            dialogTitle,
+            $"Overwrite {MainScenePath} with {sourceScenePath}?",
             "Copy",
             "Cancel");
 
@@ -102,10 +116,10 @@ public class SceneSelectorScriptEditor : Editor
             return;
         }
 
-        File.Copy(SourceScenePath, MainScenePath, true);
+        File.Copy(sourceScenePath, MainScenePath, true);
         AssetDatabase.ImportAsset(MainScenePath);
         AssetDatabase.Refresh();
 
-        Debug.Log($"Copied {SourceScenePath} to {MainScenePath}");
+        Debug.Log($"Copied {sourceScenePath} to {MainScenePath}");
     }
 }
