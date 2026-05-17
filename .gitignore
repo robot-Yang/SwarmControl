@@ -3,6 +3,10 @@
 .AppleDouble
 .LSOverride
 
+# Google Drive for Desktop sync artifacts (resource forks: "Icon\r")
+Icon?
+Icon?.meta
+
 # Python
 __pycache__/
 *.py[cod]
