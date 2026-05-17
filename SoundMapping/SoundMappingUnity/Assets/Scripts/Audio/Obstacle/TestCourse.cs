@@ -1,6 +1,7 @@
 using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
+using UnityEditor.SceneManagement;
 #endif
 using System.IO;
 using System.Collections.Generic;
@@ -17,6 +18,7 @@ public class TestCourse : MonoBehaviour
     public string endName = "Path (1)";
     public string timingStartLineName = "Starting_line";
     public string timingEndLineName = "Ending_line";
+    public string startingSquareName = "Starting_square";
     public string groundName = "Path";
 
 
@@ -56,6 +58,10 @@ public class TestCourse : MonoBehaviour
         -10f, 30f, 0f, 20f, -30f, 10f, -20f
     };
 
+    [Header("Gap 0 Lock")]
+    [Tooltip("When enabled, gap[0] is forced to sit directly in front of Starting_square every Generate — same X column as the spawn point, fixed Y from initialGapCenterHeights[0]. Overrides initialGapCenters[0] and any randomization for gap[0] only.")]
+    public bool lockGap0ToStartingSquare = true;
+
     [Header("Random Gap Centers")]
     public bool randomizeGapCenters = false;
     [Tooltip("Inclusive random X range for each gap center, in GapController local space.")]
@@ -68,6 +74,8 @@ public class TestCourse : MonoBehaviour
     [Tooltip("Set to 0 to randomize each square hole side length using the GapsController min/max range.")]
     public float squareGapSize = 0f;
     public Vector3 starEulerRotation = new Vector3(0f, -90f, 0f);
+    [Tooltip("Rotation applied to each gap.transform around its center (degrees). Since gap.transform sits at the wall/gap center, this rotates the entire gap+walls+stars around the center axis without moving the center.")]
+    public Vector3 gapEulerRotation = new Vector3(0f, 90f, 0f);
     public float[] initialGapCenterHeights = new float[]
     {
         25f, 35f, 45f, 30f, 40f, 50f, 32.5f
@@ -94,24 +102,43 @@ public class TestCourse : MonoBehaviour
     [HideInInspector]
     public Transform timingEndLine;
     [HideInInspector]
+    public Transform startingSquare;
+    [HideInInspector]
     public Transform groundTile;
 
     [System.Serializable]
     public class ObstacleWall
     {
         public string name;
+        // World position of the wall's transform.
         public float x;
         public float y;
         public float z;
+        // Wall dimensions in its own local frame (= transform.lossyScale, which
+        // ignores rotation). To get the world-space AABB you must rotate the box
+        // by (rotX, rotY, rotZ) around (x, y, z).
         public float width;
         public float height;
         public float length;
+        // World-space Euler angles (degrees). Needed to reconstruct rotated walls.
+        public float rotX;
+        public float rotY;
+        public float rotZ;
     }
 
     [System.Serializable]
     public class GapExport
     {
         public int index;
+        // World position of the gap's center (= gap.transform.position).
+        public float centerX;
+        public float centerY;
+        public float centerZ;
+        // World-space Euler angles of the gap (degrees). Non-zero for the
+        // rotated L-segment, zero for the straight section.
+        public float rotX;
+        public float rotY;
+        public float rotZ;
         public ObstacleWall left;
         public ObstacleWall right;
         public ObstacleWall top;
@@ -166,12 +193,20 @@ public class TestCourse : MonoBehaviour
             if (foundEnd != null)
                 timingEndLine = foundEnd.transform;
         }
+        startingSquare = FindDeepChild(pathHolder, startingSquareName);
+        if (startingSquare == null)
+        {
+            GameObject foundSquare = GameObject.Find(startingSquareName);
+            if (foundSquare != null)
+                startingSquare = foundSquare.transform;
+        }
         groundTile = floor.Find(groundName);
 
         if (startLine  == null) Debug.LogError("[TestCourse] Start not found");
         if (endLine    == null) Debug.LogError("[TestCourse] End not found");
         if (timingStartLine == null) Debug.LogError("[TestCourse] Timing start line not found: " + timingStartLineName);
         if (timingEndLine == null) Debug.LogError("[TestCourse] Timing end line not found: " + timingEndLineName);
+        if (startingSquare == null) Debug.LogWarning("[TestCourse] Starting square not found: " + startingSquareName + " (Starting_line X will fall back to the first gap's X).");
         if (groundTile == null) Debug.LogError("[TestCourse] Ground not found");
     }
 
@@ -228,6 +263,24 @@ public class TestCourse : MonoBehaviour
         Clean();
         PlaceStartEnd();
         GenerateGaps();
+        MarkSceneDirty();
+    }
+
+    // In editor scripts, scene modifications made via Instantiate / DestroyImmediate /
+    // transform edits do NOT automatically flag the scene as modified — the title-bar
+    // asterisk stays off and the new course is silently discarded when the scene is
+    // saved or reloaded. Call this at the end of any scene-mutating operation so
+    // Unity persists the result.
+    private void MarkSceneDirty()
+    {
+#if UNITY_EDITOR
+        if (Application.isPlaying)
+            return;
+        EditorUtility.SetDirty(this);
+        var scene = gameObject.scene;
+        if (scene.IsValid() && scene.isLoaded)
+            EditorSceneManager.MarkSceneDirty(scene);
+#endif
     }
 
     public void Save()
@@ -248,6 +301,11 @@ public class TestCourse : MonoBehaviour
 
         AutoFindReferences();
         controller.Apply();
+        // controller.Apply() resets every gap's localPosition.z to the straight-corridor
+        // formula (startZ + i * gapSpacing), which flattens the rotated L-segment.
+        // Rebuild the rotated segment so the JSON we're about to write reflects what's
+        // actually in the scene (and what was just generated).
+        PositionRotatedSegment(gcRoot);
 
         var gaps = new List<Gap>(gcRoot.GetComponentsInChildren<Gap>(includeInactive: true));
         if (gaps.Count == 0)
@@ -265,7 +323,9 @@ public class TestCourse : MonoBehaviour
         if (leftBoundary != null) boundaryWalls.Add(ToWall(leftBoundary, "BoundaryLeft"));
         if (rightBoundary != null) boundaryWalls.Add(ToWall(rightBoundary, "BoundaryRight"));
 
-        gaps.Sort((a, b) => a.transform.localPosition.z.CompareTo(b.transform.localPosition.z));
+        // Sort by sibling index (creation order along the corridor). Sorting by
+        // transform.localPosition.z is unsafe once a rotated segment exists.
+        gaps.Sort((a, b) => a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
         var gapExports = new List<GapExport>();
         for (int i = 0; i < gaps.Count; i++)
         {
@@ -274,9 +334,19 @@ public class TestCourse : MonoBehaviour
             var right = g.rightWall != null ? ToWall(g.rightWall, "RightWall") : null;
             var top = g.topWall != null && g.topWall.gameObject.activeSelf ? ToWall(g.topWall, "TopWall") : null;
             var bottom = g.bottomWall != null && g.bottomWall.gameObject.activeSelf ? ToWall(g.bottomWall, "BottomWall") : null;
+
+            Vector3 gPos = g.transform.position;
+            Vector3 gRot = g.transform.eulerAngles;
+
             gapExports.Add(new GapExport
             {
                 index = i,
+                centerX = gPos.x,
+                centerY = gPos.y,
+                centerZ = gPos.z,
+                rotX = gRot.x,
+                rotY = gRot.y,
+                rotZ = gRot.z,
                 left = left,
                 right = right,
                 top = top,
@@ -299,12 +369,17 @@ public class TestCourse : MonoBehaviour
         string path = Path.Combine(dir, "TestCourse.json");
         File.WriteAllText(path, json);
         Debug.Log("[TestCourse] Saved obstacle course to " + path);
+
+        // Save() calls controller.Apply() + PositionRotatedSegment() which mutate
+        // the scene. Mark dirty so those edits stick.
+        MarkSceneDirty();
     }
 
     private ObstacleWall ToWall(Transform t, string defaultName)
     {
         Vector3 p = t.position;
         Vector3 s = t.lossyScale;
+        Vector3 r = t.eulerAngles;
         return new ObstacleWall
         {
             name = string.IsNullOrEmpty(t.name) ? defaultName : t.name,
@@ -313,7 +388,10 @@ public class TestCourse : MonoBehaviour
             z = p.z,
             width = s.x,
             height = s.y,
-            length = s.z
+            length = s.z,
+            rotX = r.x,
+            rotY = r.y,
+            rotZ = r.z
         };
     }
 
@@ -400,46 +478,85 @@ public class TestCourse : MonoBehaviour
         if (trajectoryStartLine == null && trajectoryEndLine == null)
             return;
 
-        float firstGapZ = FirstGapWorldZ();
-        float lastGapZ = LastGapWorldZ(gapSpacing);
-        float lineX = transform.TransformPoint(gc_position).x;
-
-        if (controller != null)
+        // Fall back to the Z-only estimate when no gaps exist yet.
+        if (controller == null)
         {
-            Gap[] gaps = controller.GetComponentsInChildren<Gap>(includeInactive: true);
-            if (gaps.Length > 0)
-            {
-                Transform firstGap = gaps[0].transform;
-                Transform lastGap = gaps[0].transform;
-                for (int i = 1; i < gaps.Length; i++)
-                {
-                    if (gaps[i].transform.position.z < firstGap.position.z)
-                        firstGap = gaps[i].transform;
-                    if (gaps[i].transform.position.z > lastGap.position.z)
-                        lastGap = gaps[i].transform;
-                }
-
-                firstGapZ = firstGap.position.z;
-                lastGapZ = lastGap.position.z;
-                lineX = firstGap.position.x;
-            }
+            float fallbackFirstZ = FirstGapWorldZ();
+            float fallbackLastZ = LastGapWorldZ(gapSpacing);
+            float fallbackX = transform.TransformPoint(gc_position).x;
+            ApplyLinePosition(trajectoryStartLine, fallbackX, fallbackFirstZ - startLineGapOffset);
+            ApplyLinePosition(trajectoryEndLine, fallbackX, fallbackLastZ + finishLineGapOffset);
+            return;
         }
+
+        Gap[] gaps = controller.GetComponentsInChildren<Gap>(includeInactive: true);
+        if (gaps.Length == 0)
+            return;
+
+        // Sort by sibling index (creation order). Once a rotated segment exists,
+        // gap.position.z is no longer monotonic in corridor index — rotated gaps
+        // sit in the parent +X direction, so first/last-by-Z would be wrong.
+        System.Array.Sort(gaps, (a, b) =>
+            a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
+
+        Transform firstGap = gaps[0].transform;
+        Transform lastGap = gaps[gaps.Length - 1].transform;
 
         if (trajectoryStartLine != null)
         {
-            Vector3 p = trajectoryStartLine.position;
-            p.x = lineX;
-            p.z = firstGapZ - startLineGapOffset;
-            trajectoryStartLine.position = p;
+            // One offset BEFORE the first gap along its own corridor direction.
+            // firstGap is always unrotated under current rules, so this is -Z.
+            Vector3 dir = firstGap.rotation * Vector3.forward;
+            Vector3 target = firstGap.position - dir * startLineGapOffset;
+
+            // X must follow the Starting_square scene object — NOT the first gap.
+            // firstGap.position.x = gc_position.x + gap[0].gapCenterX, which is
+            // randomized / driven by initialGapCenters[0]. Without this override
+            // Starting_line drifts off-axis from the spawn square every Generate.
+            float startX = (startingSquare != null) ? startingSquare.position.x : target.x;
+            ApplyLinePosition(trajectoryStartLine, startX, target.z);
         }
 
         if (trajectoryEndLine != null)
         {
-            Vector3 p = trajectoryEndLine.position;
-            p.x = lineX;
-            p.z = lastGapZ + finishLineGapOffset;
-            trajectoryEndLine.position = p;
+            // One offset AFTER the last gap along its own corridor direction.
+            // If the last gap is part of the rotated segment, the line sits along
+            // +X (or whatever direction gapEulerRotation rotated +Z to).
+            Vector3 dir = lastGap.rotation * Vector3.forward;
+            Vector3 target = lastGap.position + dir * finishLineGapOffset;
+            ApplyLinePosition(trajectoryEndLine, target.x, target.z);
+
+            // Snap Y by COPYING the Starting_line ↔ firstGap vertical offset.
+            // Whatever height the user manually placed Starting_line at
+            // (typically the bottom sill of gap[0]'s wall panel), Ending_line
+            // ends up at the matching height relative to lastGap. This avoids
+            // having to guess what "bottom" means (panel bottom vs. hole sill
+            // vs. ground) — we just mirror the exact same offset.
+            //
+            // Falls back gracefully if Starting_line is missing: leaves
+            // Ending_line's Y untouched.
+            if (trajectoryStartLine != null)
+            {
+                float dyStartingLineFromGap0 = trajectoryStartLine.position.y - firstGap.position.y;
+                Vector3 endPos = trajectoryEndLine.position;
+                endPos.y = lastGap.position.y + dyStartingLineFromGap0;
+                trajectoryEndLine.position = endPos;
+            }
+
+            // Match the rotation of the last gap so the line stays perpendicular
+            // to the corridor at its tail.
+            trajectoryEndLine.rotation = lastGap.rotation;
         }
+    }
+
+    private static void ApplyLinePosition(Transform line, float worldX, float worldZ)
+    {
+        if (line == null) return;
+        Vector3 p = line.position;
+        p.x = worldX;
+        p.z = worldZ;
+        // Y is intentionally preserved — the line's height is configured manually.
+        line.position = p;
     }
 
     public void GenerateGaps()
@@ -475,12 +592,30 @@ public class TestCourse : MonoBehaviour
         for (int i = 0; i < NB_GAPS; i++)
             CreateGap(gc.transform, i);
 
+        // Lock gap[0] to Starting_square BEFORE the first Apply, so that even
+        // when initialGapCenters[0]/randomizeGapCenters would have moved it,
+        // gap[0] always lands directly in front of Starting_line.
+        LockGap0ToStartingSquare(gc.transform);
+
+        // Pick a single transition gap k in [2, NB_GAPS-2] (inclusive). From
+        // index k onward every gap gets `gapEulerRotation`; earlier gaps keep
+        // identity rotation. This produces one "rotation event" along the
+        // corridor, with downstream gaps staying parallel to the rotated one.
+        AssignTransitionRotation(gc.transform);
+
         controller.Apply();
+        PositionRotatedSegment(gc.transform);
 
         if (useFixedTotalGapCenterDistance)
         {
             AdjustGapCentersForTargetTotalDistance(controller, targetTotalGapCenterDistance);
+            // RandomizeCentersUntilAtLeastTarget (inside the fixed-distance pass)
+            // will have re-randomized every gap including gap[0]. Re-lock it
+            // before the second Apply so the scene-final state still has gap[0]
+            // pinned to Starting_square.
+            LockGap0ToStartingSquare(gc.transform);
             controller.Apply();
+            PositionRotatedSegment(gc.transform);
         }
 
         AlignTimingLinesToGeneratedGaps(controller);
@@ -494,7 +629,7 @@ public class TestCourse : MonoBehaviour
         if (gaps.Length < 2)
             return;
 
-        System.Array.Sort(gaps, (a, b) => a.transform.localPosition.z.CompareTo(b.transform.localPosition.z));
+        System.Array.Sort(gaps, (a, b) => a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
 
         float fixedZSpacing = gapSpacing;
         float minTotalDistance = TotalGapCenterDistanceForSpacing(gaps, fixedZSpacing, 0f);
@@ -703,14 +838,14 @@ public class TestCourse : MonoBehaviour
             return;
         }
 
-        System.Array.Sort(gaps, (a, b) => a.transform.position.z.CompareTo(b.transform.position.z));
+        System.Array.Sort(gaps, (a, b) => a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
 
         float totalDistance = 0f;
         List<string> segments = new List<string>();
         for (int i = 0; i < gaps.Length - 1; i++)
         {
-            Vector3 currentCenter = GapCenterWorldPosition(gaps[i]);
-            Vector3 nextCenter = GapCenterWorldPosition(gaps[i + 1]);
+            Vector3 currentCenter = GapCenterLocalPosition(gaps[i]);
+            Vector3 nextCenter = GapCenterLocalPosition(gaps[i + 1]);
             float distance = Vector3.Distance(currentCenter, nextCenter);
             totalDistance += distance;
             segments.Add($"Gap {i + 1}->{i + 2}: {distance:F2}");
@@ -719,12 +854,14 @@ public class TestCourse : MonoBehaviour
         Debug.Log($"[TestCourse] Gap distance summary: total={totalDistance:F2}; {string.Join(", ", segments)}");
     }
 
-    private Vector3 GapCenterWorldPosition(Gap gap)
+    private Vector3 GapCenterLocalPosition(Gap gap)
     {
         if (gap == null)
             return Vector3.zero;
 
-        return gap.transform.TransformPoint(new Vector3(gap.gapCenterX, gap.gapCenterY, 0f));
+        // gap.transform.localPosition is kept in sync with (gapCenterX, gapCenterY, i*gapSpacing)
+        // by Gap.Apply, so it already is the wall/gap center in the GapController's local frame.
+        return gap.transform.localPosition;
     }
 
     private void CreateGap(Transform parent, int index)
@@ -743,6 +880,9 @@ public class TestCourse : MonoBehaviour
                 gap.gapHeight = squareGapSize;
             }
             gap.starEulerRotation = starEulerRotation;
+            // gapEulerRotation is assigned in GenerateGaps after a random
+            // transition gap is chosen — leave the per-gap field at its
+            // default zero here.
         }
 
         if (randomizeGapCenters)
@@ -766,10 +906,11 @@ public class TestCourse : MonoBehaviour
         // Pre controller gap positioning
         float localZ = firstGapZOffset + index * 0.1f;
 
-        // Place gap relative to the controller
+        // Place this gap at the wall center so rotations around gap.transform
+        // pivot around the center (preserving center-to-center distances).
         gapGO.transform.localPosition = new Vector3(
-            0f,
-            0f,
+            gap.gapCenterX,
+            gap.gapCenterY,
             localZ
         );
         gapGO.transform.localScale = Vector3.one;
@@ -829,6 +970,127 @@ public class TestCourse : MonoBehaviour
         B.localPosition = bp;
 
         gap.Initialize();
+    }
+
+    // Pin gap[0] to a fixed location: same world X as Starting_square (so it's
+    // directly in front of Starting_line) and a fixed height from
+    // initialGapCenterHeights[0]. Overrides anything initialGapCenters[0] or
+    // the randomizer wrote, but only for gap[0].
+    private void LockGap0ToStartingSquare(Transform gapControllerRoot)
+    {
+        if (!lockGap0ToStartingSquare)
+            return;
+        if (gapControllerRoot == null || startingSquare == null)
+            return;
+
+        Gap[] gaps = gapControllerRoot.GetComponentsInChildren<Gap>(includeInactive: true);
+        if (gaps.Length == 0)
+            return;
+        System.Array.Sort(gaps, (a, b) =>
+            a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
+
+        Gap g0 = gaps[0];
+
+        // Project Starting_square's world X into the GapController's local
+        // frame — that local X IS gap[0].gapCenterX, since Gap.Apply sets
+        // gap.transform.localPosition.x = gapCenterX for unrotated gaps.
+        // (gap[0] is always unrotated under current AssignTransitionRotation
+        // rules — the transition gap k is always >= 2.)
+        Vector3 squareLocal = gapControllerRoot.InverseTransformPoint(startingSquare.position);
+        g0.gapCenterX = squareLocal.x;
+
+        // Use initialGapCenterHeights[0] as the fixed Y so every Generate gives
+        // gap[0] the same vertical placement too.
+        if (initialGapCenterHeights != null && initialGapCenterHeights.Length > 0)
+            g0.gapCenterY = initialGapCenterHeights[0];
+    }
+
+    private void AssignTransitionRotation(Transform gapControllerRoot)
+    {
+        // Gather gaps in creation order (== local Z order), including inactive ones.
+        Gap[] gaps = gapControllerRoot.GetComponentsInChildren<Gap>(includeInactive: true);
+        if (gaps.Length == 0)
+            return;
+
+        // Sort by sibling index (creation order along the corridor). Z is unsafe
+        // once a rotated segment exists — rotated gaps scatter their Z around
+        // k*gapSpacing, so sort by Z would no longer match corridor order.
+        System.Array.Sort(gaps, (a, b) =>
+            a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
+
+        // Reset everyone to identity first, in case this is a re-Generate.
+        for (int i = 0; i < gaps.Length; i++)
+            gaps[i].gapEulerRotation = Vector3.zero;
+
+        // Need at least gap (0), gap (1), the transition gap, and one trailing gap
+        // after it → 4 gaps minimum. With fewer, skip the rotation event.
+        if (gaps.Length < 4)
+        {
+            Debug.Log($"[TestCourse] Skipping transition rotation: only {gaps.Length} gap(s); need >= 4.");
+            return;
+        }
+
+        // Pick k in [2, NB_GAPS - 2]. Random.Range(int, int) is [min, max).
+        int minK = 2;
+        int maxKExclusive = gaps.Length - 1; // so picks include gaps.Length - 2
+        int k = Random.Range(minK, maxKExclusive);
+
+        for (int i = k; i < gaps.Length; i++)
+            gaps[i].gapEulerRotation = gapEulerRotation;
+
+        Debug.Log($"[TestCourse] Transition gap = Gap ({k}); gaps {k}..{gaps.Length - 1} rotated by {gapEulerRotation}.");
+    }
+
+    private void PositionRotatedSegment(Transform gapControllerRoot)
+    {
+        // Lay out the rotated segment. Each rotated gap[i] (i >= transition) sits at:
+        //     gap[k].position + R * (cX_i - cX_k, cY_i - cY_k, (i-k) * gapSpacing)
+        // where R = Quaternion.Euler(gapEulerRotation). gap[k] itself stays on the
+        // original (unrotated) corridor line so the transition is just one segment.
+        // Consecutive distance within the rotated segment is sqrt(ΔcX² + ΔcY² + gapSpacing²),
+        // identical to the unrotated formula because rotations are isometries.
+        Gap[] gaps = gapControllerRoot.GetComponentsInChildren<Gap>(includeInactive: true);
+        if (gaps.Length == 0) return;
+        System.Array.Sort(gaps, (a, b) =>
+            a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
+
+        // Find the first rotated gap.
+        int transitionIdx = -1;
+        for (int i = 0; i < gaps.Length; i++)
+        {
+            if (gaps[i].gapEulerRotation != Vector3.zero)
+            {
+                transitionIdx = i;
+                break;
+            }
+        }
+        if (transitionIdx < 0) return; // no rotated gaps
+
+        Gap kGap = gaps[transitionIdx];
+        Quaternion segmentRot = Quaternion.Euler(kGap.gapEulerRotation);
+
+        // gap[k]'s position continues the unrotated corridor (same Z as if it
+        // were unrotated). GapsController.Apply leaves the rotated gap's Z
+        // untouched, so we set it here explicitly using the unrotated formula.
+        float startZ = gaps[0].transform.localPosition.z;
+        Vector3 kOrigin = new Vector3(
+            kGap.gapCenterX,
+            kGap.gapCenterY,
+            startZ + transitionIdx * gapSpacing
+        );
+        kGap.transform.localPosition = kOrigin;
+
+        // Each subsequent gap sits in the rotated frame anchored at kOrigin.
+        for (int i = transitionIdx + 1; i < gaps.Length; i++)
+        {
+            Gap g = gaps[i];
+            Vector3 inRotatedFrame = new Vector3(
+                g.gapCenterX - kGap.gapCenterX,
+                g.gapCenterY - kGap.gapCenterY,
+                (i - transitionIdx) * gapSpacing
+            );
+            g.transform.localPosition = kOrigin + segmentRot * inRotatedFrame;
+        }
     }
 
     private float RandomInRange(Vector2 range)

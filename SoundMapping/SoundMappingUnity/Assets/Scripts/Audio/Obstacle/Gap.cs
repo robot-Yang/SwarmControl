@@ -40,6 +40,8 @@ public class Gap : MonoBehaviour
     public List<StarConfig> stars = new List<StarConfig>();
     public float gapCenterY = 18.3f;
     public Vector3 starEulerRotation = new Vector3(0f, -90f, 0f);
+    [Tooltip("Rotation applied to this gap.transform around its own center. With gap.transform parked at the wall center, this rotates the whole gap+walls+stars in place — center position and inter-gap distances are preserved. TestCourse.GenerateGaps fills this in per-gap; leave at zero for unrotated gaps.")]
+    public Vector3 gapEulerRotation = Vector3.zero;
     private const string collectiblePrefabName = "Star";
     private const string collectibleFolder     = "Assets/Prefab/";
 
@@ -150,8 +152,11 @@ public class Gap : MonoBehaviour
         float effectiveGapHeight = useSquareHole
             ? Mathf.Max(resolution, gapHeight)
             : Mathf.Max(resolution, leftWall.localScale.y);
+        // baseY is the bottom of the star grid in this transform's local frame
+        // (origin == gap center). For useSquareHole the gap hole is centered on
+        // the origin; for !useSquareHole the wall sits at leftWall.localPosition.y.
         float baseY = useSquareHole
-            ? gapCenterY - effectiveGapHeight * 0.5f
+            ? -effectiveGapHeight * 0.5f
             : leftWall.localPosition.y - (leftWall.localScale.y * 0.5f);
 
         float startX = -halfGap + (resolution * 0.5f);
@@ -194,7 +199,7 @@ public class Gap : MonoBehaviour
                 sc.instance.name = sc.starName;
             #endif
                 sc.instance.localPosition = new Vector3(
-                    gapCenterX + sc.offsetX,
+                    sc.offsetX,
                     sc.offsetY,
                     0f
                 );
@@ -274,13 +279,55 @@ public class Gap : MonoBehaviour
         else
             gapCenterY = Mathf.Clamp(gapCenterY, halfGapHeight, wallHeight - halfGapHeight);
 
+        // Pivot this transform at the gap/wall center so any rotation applied
+        // to gap.transform rotates around the center (preserving center-to-center
+        // distance between gaps). Only sync for unrotated gaps — rotated gaps
+        // sit on a separate corridor segment whose positions are computed in
+        // TestCourse.PositionRotatedSegment.
+        if (gapEulerRotation == Vector3.zero)
+        {
+            Vector3 pos = transform.localPosition;
+            pos.x = gapCenterX;
+            pos.y = gapCenterY;
+            transform.localPosition = pos;
+        }
+
+        // Apply the gap rotation AFTER position is set. Because the transform
+        // sits at the wall center, this rotates the gap+walls+stars in place
+        // and leaves the center position (and therefore inter-gap distances)
+        // unchanged.
+        transform.localRotation = Quaternion.Euler(gapEulerRotation);
+
         float halfGap = gapSize * 0.5f;
 
-        float leftEdge  = useSquareHole ? gapCenterX - outerSide * 0.5f : -halfCorridor;
-        float rightEdge = useSquareHole ? gapCenterX + outerSide * 0.5f :  halfCorridor;
+        // Wall edges relative to this transform's origin (== gap center).
+        float leftEdge, rightEdge;
+        if (useSquareHole)
+        {
+            leftEdge = -outerSide * 0.5f;
+            rightEdge = outerSide * 0.5f;
+        }
+        else
+        {
+            // Wall spans the corridor; in this transform's frame the corridor
+            // is shifted by -gapCenterX (transform origin is at gapCenterX in
+            // GapController's frame).
+            leftEdge = -halfCorridor - gapCenterX;
+            rightEdge = halfCorridor - gapCenterX;
+        }
 
-        float gapLeft  = gapCenterX - halfGap;
-        float gapRight = gapCenterX + halfGap;
+        float gapLeft = -halfGap;
+        float gapRight = halfGap;
+
+        // For !useSquareHole the wall sits at world Y == TestCourse.wallY; offset
+        // by -gapCenterY because this transform is now at gapCenterY.
+        float wallLocalY = 0f;
+        if (!useSquareHole)
+        {
+            TestCourse tc = GetComponentInParent<TestCourse>();
+            float wallY = tc != null ? tc.wallY : 0f;
+            wallLocalY = wallY - gapCenterY;
+        }
 
         // ---------- LEFT WALL ----------
         float leftWidth = Mathf.Max(0f, gapLeft - leftEdge);
@@ -292,8 +339,7 @@ public class Gap : MonoBehaviour
 
         Vector3 lp = leftWall.localPosition;
         lp.x = leftEdge + leftWidth * 0.5f;
-        if (useSquareHole)
-            lp.y = gapCenterY;
+        lp.y = wallLocalY;
         leftWall.localPosition = lp;
 
         // ---------- RIGHT WALL ----------
@@ -306,8 +352,7 @@ public class Gap : MonoBehaviour
 
         Vector3 rp = rightWall.localPosition;
         rp.x = rightEdge - rightWidth * 0.5f;
-        if (useSquareHole)
-            rp.y = gapCenterY;
+        rp.y = wallLocalY;
         rightWall.localPosition = rp;
 
         if (topWall != null)
@@ -321,10 +366,10 @@ public class Gap : MonoBehaviour
 
         if (useSquareHole && topWall != null && bottomWall != null)
         {
-            float gapBottom = gapCenterY - halfGapHeight;
-            float gapTop = gapCenterY + halfGapHeight;
-            float outerBottom = gapCenterY - outerSide * 0.5f;
-            float outerTop = gapCenterY + outerSide * 0.5f;
+            float gapBottom = -halfGapHeight;
+            float gapTop = halfGapHeight;
+            float outerBottom = -outerSide * 0.5f;
+            float outerTop = outerSide * 0.5f;
             float bottomHeight = Mathf.Max(0f, gapBottom - outerBottom);
             float topHeight = Mathf.Max(0f, outerTop - gapTop);
 
@@ -334,7 +379,7 @@ public class Gap : MonoBehaviour
             bottomWall.localScale = bs;
 
             Vector3 bp = bottomWall.localPosition;
-            bp.x = gapCenterX;
+            bp.x = 0f;
             bp.y = outerBottom + bottomHeight * 0.5f;
             bottomWall.localPosition = bp;
 
@@ -344,7 +389,7 @@ public class Gap : MonoBehaviour
             topWall.localScale = ts;
 
             Vector3 tp = topWall.localPosition;
-            tp.x = gapCenterX;
+            tp.x = 0f;
             tp.y = gapTop + topHeight * 0.5f;
             topWall.localPosition = tp;
         }
