@@ -66,11 +66,16 @@ public class MigrationPointController : MonoBehaviour
     public float minHoldTime = 0.5f;          // must stay best for this long before switching
     public float minSwitchCooldown = 1.0f;    // cooldown after a switch to avoid flip-flop
 
+    [Tooltip("Block swapping back to the just-departed drone for this many seconds to prevent A/B ping-pong.")]
+    public float swapBackCooldown = 2.0f;
+
     // === Auto endpoint-switching (runtime state) ===
     float _nextCheckTime = 0f;
     GameObject _candidateFrontmost = null;
     float _candidateSinceTime = 0f;
     float _lastSwitchTime = -999f;
+    GameObject _recentlyDepartedDrone = null;
+    float _recentlyDepartedExpiry = 0f;
 
     [Header("Group Filtering")]
     public bool restrictToMainGroup = true;   // only switch within the largest connected subnetwork
@@ -162,8 +167,15 @@ public class MigrationPointController : MonoBehaviour
         if (reference == null || swarmModel.swarmHolder == null) return null;
 
         Vector3 refPos = reference.position;
+        // Use the smoothed swarm heading instead of reference.forward so the search axis
+        // doesn't flip when we hand off between drones whose individual yaws differ
+        // (which causes endpoint auto-switch to ping-pong between front and back).
+        Vector3 axis = _headingInitialized
+            ? Vector3.ProjectOnPlane(_swarmHeading, Vector3.up).normalized
+            : Vector3.ProjectOnPlane(reference.forward, Vector3.up).normalized;
+        if (axis.sqrMagnitude < 1e-6f) axis = reference.forward;
         float   dir    = SelectionDirectionSign();        // +1 Frontmost, -1 Backmost
-        Vector3 fwd    = reference.forward * dir;         // axis we score against
+        Vector3 fwd    = axis * dir;                      // axis we score against
 
         // Baseline = current embodied drone's signed forward distance (if any)
         float baselineForward = float.NegativeInfinity;
@@ -182,6 +194,10 @@ public class MigrationPointController : MonoBehaviour
 
             // Skip the currently embodied drone
             if (CameraMovement.embodiedDrone != null && go == CameraMovement.embodiedDrone)
+                continue;
+
+            // Block the drone we just departed from to avoid immediate A/B swap-back.
+            if (_recentlyDepartedDrone != null && go == _recentlyDepartedDrone && Time.time < _recentlyDepartedExpiry)
                 continue;
 
             // Filter by main group if provided
@@ -395,6 +411,17 @@ public class MigrationPointController : MonoBehaviour
         {
             if (_candidateFrontmost != CameraMovement.embodiedDrone)
             {
+                // Snap the candidate's yaw to swarmHeading before promoting it. Otherwise
+                // a not-yet-aligned candidate drags swarmHeading toward its own forward
+                // post-handoff, which rotates the search axis and re-triggers a flip.
+                if (_headingInitialized)
+                {
+                    Vector3 yawDir = Vector3.ProjectOnPlane(_swarmHeading, Vector3.up).normalized;
+                    if (yawDir.sqrMagnitude > 1e-6f)
+                        _candidateFrontmost.transform.rotation = Quaternion.LookRotation(yawDir, Vector3.up);
+                }
+                _recentlyDepartedDrone = CameraMovement.embodiedDrone;
+                _recentlyDepartedExpiry = Time.time + swapBackCooldown;
                 CameraMovement.nextEmbodiedDrone = _candidateFrontmost;
                 _lastSwitchTime = Time.time;
                 Debug.Log($"[AutoSwitch] Next embodied ({selectionMode}/main-group): " +

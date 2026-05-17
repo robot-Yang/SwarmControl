@@ -177,6 +177,20 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     // --- Input snapshot buffer ---
     private readonly List<InputFrame> _inputBuffer = new List<InputFrame>();
 
+    // --- Per-frame swarm-wide snapshot buffer ---
+    private readonly List<SwarmFrame> _swarmFrameBuffer = new List<SwarmFrame>();
+
+    // --- Per-frame subnetwork snapshot buffer (one row per component per sample) ---
+    private readonly List<SubnetSnapshot> _subnetBuffer = new List<SubnetSnapshot>();
+
+    // --- One-shot scene snapshot, captured on first MarkTrialStart ---
+    private int _totalCollectibles = 0;
+    private List<ObstacleInfo> _obstacleSnapshot = new List<ObstacleInfo>();
+    private bool _sceneSnapshotTaken = false;
+
+    // Cached MigrationPointController, resolved lazily.
+    private MigrationPointController _migrationController;
+
 
     // -------------------- Data types --------------------
     [Serializable]
@@ -184,8 +198,69 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     {
         public float t;
         public float x, y, z;
-        public byte g; // 0 = not in main group; 1 = in main group
-        public byte e; // 1 = embodied drone at this frame, 0 = not embodied
+        public float vx, vy, vz;   // velocity (world-space, m/s) — sourced from DroneFake.velocity
+        public float sc;           // score in [0,1]: 1 if in main network, 0 otherwise (per DroneFake.score)
+        public byte l;             // network layer (DroneFake.layer; 1=embodied, 2=neighbor, ...)
+        public byte g;             // 0 = not in main group; 1 = in main group
+        public byte e;             // 1 = embodied drone at this frame, 0 = not embodied
+    }
+
+    /// <summary>
+    /// Per-frame swarm-wide snapshot. Time-aligned with `TrajFrame.t` and `InputFrame.t`.
+    /// Lets analysis ask questions about the swarm as a whole (e.g. when did the swarm
+    /// split, how many drones were disconnected from the main group at time t, etc.)
+    /// without having to re-derive everything from the per-drone arrays.
+    /// </summary>
+    [Serializable]
+    public struct SwarmFrame
+    {
+        public float t;
+        public int n;                 // active drone count (children of swarmHolder)
+        public int nMain;             // size of the largest connected component (main group)
+        public int nDisc;             // drones NOT in the main group at this instant
+        public int nCrash;            // cumulative crash count so far (Timer.numberDroneDied)
+        public int nSub;              // number of disconnected subnetworks (gap count = nSub-1)
+        public int colRemain;         // collectibles (tag "Collectibles") still present in scene
+        public float mx, mz;          // migrationPoint XZ
+        public float avx, avy, avz;   // alignementVector (target direction)
+        public float spreadCur;       // current desired separation
+        public float spreadMin;       // runtime lower bound
+        public float spreadMax;       // runtime upper bound
+        public float tElapsed;        // Timer.elapsedTime (study clock)
+    }
+
+    /// <summary>
+    /// One row per subnetwork per sample. `t` is the sample time, `idx` is the rank
+    /// of this subnetwork when sorted by size (0 = main group), `size` is its drone
+    /// count, `cx/cy/cz` is its centroid, `extent` is the max distance from any
+    /// member to the centroid (a crude "gap size" proxy). When the swarm is fully
+    /// connected there is exactly one row per t; when it splits, you get one per
+    /// component, so the gap geometry is recoverable.
+    /// </summary>
+    [Serializable]
+    public struct SubnetSnapshot
+    {
+        public float t;
+        public int idx;
+        public int size;
+        public float cx, cy, cz;
+        public float extent;
+    }
+
+    /// <summary>
+    /// One-shot dump of a scene-static obstacle. Captured once at the first
+    /// MarkTrialStart so analysis knows the level layout without having to load
+    /// the .unity file. Box/cylinder rotation is encoded as a quaternion (qx..qw).
+    /// </summary>
+    [Serializable]
+    public struct ObstacleInfo
+    {
+        public string type;
+        public float cx, cy, cz;
+        public float radius;
+        public float sx, sy, sz;
+        public float height;
+        public float qx, qy, qz, qw;
     }
 
 
@@ -299,6 +374,22 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         // Time-aligned with `trajectories[].frames`: same `t` axis, same cadence
         // (governed by sampleHz / recordHz). Empty when logInputs is false.
         public List<InputFrame> inputs = new List<InputFrame>();
+
+        // --- Per-frame swarm-wide snapshots (subnetwork count, main group size,
+        // migration target, spread bounds, timer). Time-aligned with `inputs`.
+        public List<SwarmFrame> swarmFrames = new List<SwarmFrame>();
+
+        // --- Per-frame subnetwork rows ---
+        // One row per disconnected component per sample, so analysis can recover
+        // "gap geometry" without re-running the union-find offline.
+        public List<SubnetSnapshot> subnetworks = new List<SubnetSnapshot>();
+
+        // --- Total collectibles in the scene at run start ---
+        // collectiblesPickedUp / totalCollectibles gives the completion ratio.
+        public int totalCollectibles;
+
+        // --- Scene-static obstacles, captured once at the start of the run ---
+        public List<ObstacleInfo> obstacles = new List<ObstacleInfo>();
     }
 
 
@@ -568,6 +659,16 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 
         // Reset input buffer for new run
         _inputBuffer.Clear();
+
+        // Reset swarm-wide and subnetwork buffers for new run
+        _swarmFrameBuffer.Clear();
+        _subnetBuffer.Clear();
+
+        // One-shot scene snapshot (total collectibles + obstacle list).
+        // Done here rather than at scene-load so collectibles spawned by trial
+        // setup scripts are counted, and obstacle lists populated by registrars
+        // that run on Awake have already finished.
+        TakeSceneSnapshot();
         
 #if UNITY_EDITOR
         Debug.Log($"[SwarmTrajectoryRecorder] Trial START '{_openTrial.label}' at t={_openTrial.startGameTime:F2}s");
@@ -648,6 +749,12 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 
         _crashBuffer.Clear();
         _inputBuffer.Clear();
+        _swarmFrameBuffer.Clear();
+        _subnetBuffer.Clear();
+
+        _totalCollectibles = 0;
+        _obstacleSnapshot.Clear();
+        _sceneSnapshotTaken = false;
 
         _embodiedTransform = null;
         _embodiedStableId = int.MinValue;
@@ -1000,10 +1107,27 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         {
             if (!_trajById.TryGetValue(ids[i], out var traj)) continue;
             Vector3 p = positions[i];
+
+            // Pull richer per-drone state from DroneFake. Defaults handle any
+            // drone whose DroneController/droneFake hasn't been wired up yet.
+            Vector3 vel = Vector3.zero;
+            float score = 0f;
+            byte layer = 0;
+            var dc = _droneTransforms[i] ? _droneTransforms[i].GetComponent<DroneController>() : null;
+            if (dc != null && dc.droneFake != null)
+            {
+                vel = dc.droneFake.velocity;
+                score = dc.droneFake.score;
+                layer = (byte)Mathf.Clamp(dc.droneFake.layer, 0, 255);
+            }
+
             traj.frames.Add(new TrajFrame
             {
                 t = t,
                 x = p.x, y = p.y, z = p.z,
+                vx = vel.x, vy = vel.y, vz = vel.z,
+                sc = score,
+                l = layer,
                 g = (byte)(inMain[i] ? 1 : 0),
                 e = (byte)((ids[i] == _embodiedStableId) ? 1 : 0)
             });
@@ -1016,6 +1140,170 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
             EnsureInputRefs();  // additive scenes may have brought refs in late
             if (fusionManager != null) _inputBuffer.Add(SnapshotInputs(t));
         }
+
+        // Swarm-wide snapshot (counts, gap geometry, migration target, spread, timer).
+        // Cheap: a few field reads plus one walk over the network's connected
+        // components. Done after the per-drone loop so positions are stable.
+        SnapshotSwarmState(t);
+    }
+
+    /// <summary>
+    /// One row of swarm-wide state + one row per disconnected subnetwork. Pulled
+    /// straight from `swarmModel.network`, `MigrationPointController`, and
+    /// `Timer` — every field is already public/static. NaN-safe defaults for any
+    /// system that isn't initialized yet (e.g. first sample on scene load).
+    /// </summary>
+    private void SnapshotSwarmState(float t)
+    {
+        // Resolve MigrationPointController lazily — additive scene loads mean we
+        // can't rely on it being there at Awake. Fine to retry every frame; the
+        // FindObjectOfType is only called when the cached ref is null.
+        if (_migrationController == null) _migrationController = FindObjectOfType<MigrationPointController>();
+
+        int activeDrones = (swarmRoot != null) ? swarmRoot.childCount : _droneTransforms.Count;
+        int nMain = 0;
+        int nDisc = 0;
+        int nSub = 0;
+
+        // Subnetwork details — sort by size descending so idx=0 is always the main group.
+        var net = swarmModel.network;
+        List<HashSet<DroneFake>> subs = (net != null) ? net.GetSubnetworks() : null;
+        if (subs != null && subs.Count > 0)
+        {
+            // Stable sort by descending size for predictable idx semantics across frames.
+            subs.Sort((a, b) => b.Count.CompareTo(a.Count));
+            nSub = subs.Count;
+            nMain = subs[0].Count;
+
+            int totalInSubs = 0;
+            for (int i = 0; i < subs.Count; i++)
+            {
+                var comp = subs[i];
+                int sz = comp.Count;
+                totalInSubs += sz;
+
+                // Centroid + extent (max distance from centroid). The extent is a
+                // crude scale for the subnetwork — useful for plotting "gap size".
+                Vector3 sum = Vector3.zero;
+                foreach (var df in comp) sum += df.position;
+                Vector3 centroid = sum / Mathf.Max(1, sz);
+
+                float maxR2 = 0f;
+                foreach (var df in comp)
+                {
+                    float r2 = (df.position - centroid).sqrMagnitude;
+                    if (r2 > maxR2) maxR2 = r2;
+                }
+
+                _subnetBuffer.Add(new SubnetSnapshot
+                {
+                    t = t,
+                    idx = i,
+                    size = sz,
+                    cx = centroid.x, cy = centroid.y, cz = centroid.z,
+                    extent = Mathf.Sqrt(maxR2),
+                });
+            }
+            nDisc = Mathf.Max(0, totalInSubs - nMain);
+        }
+
+        int colRemain = 0;
+        try { colRemain = GameObject.FindGameObjectsWithTag("Collectibles").Length; }
+        catch { /* tag may not exist in some scenes */ }
+
+        Vector2 mp = (_migrationController != null) ? _migrationController.migrationPoint : Vector2.zero;
+        Vector3 av = MigrationPointController.alignementVector;
+        float spreadCur = (swarmModel.network != null) ? DroneFake.desiredSeparation : float.NaN;
+        float spreadMin = (_migrationController != null) ? _migrationController.minSpreadnessRuntime : float.NaN;
+        float spreadMax = (_migrationController != null) ? _migrationController.maxSpreadnessRuntime : float.NaN;
+
+        _swarmFrameBuffer.Add(new SwarmFrame
+        {
+            t = t,
+            n = activeDrones,
+            nMain = nMain,
+            nDisc = nDisc,
+            nCrash = Timer.numberDroneDied,
+            nSub = nSub,
+            colRemain = colRemain,
+            mx = mp.x, mz = mp.y,
+            avx = av.x, avy = av.y, avz = av.z,
+            spreadCur = spreadCur,
+            spreadMin = spreadMin,
+            spreadMax = spreadMax,
+            tElapsed = Timer.elapsedTime,
+        });
+    }
+
+    /// <summary>
+    /// Take a one-shot snapshot of scene-static info: how many collectibles exist
+    /// at run start (so completion ratio = picked / total) and every obstacle in
+    /// the scene with its geometry. Called from MarkTrialStartInternal; idempotent
+    /// within a single run via _sceneSnapshotTaken.
+    /// </summary>
+    private void TakeSceneSnapshot()
+    {
+        if (_sceneSnapshotTaken) return;
+        _sceneSnapshotTaken = true;
+
+        _totalCollectibles = 0;
+        try { _totalCollectibles = GameObject.FindGameObjectsWithTag("Collectibles").Length; }
+        catch { /* tag may not exist */ }
+
+        _obstacleSnapshot.Clear();
+        var obstacles = ClosestPointCalculator.obstacles;
+        if (obstacles != null)
+        {
+            foreach (var obs in obstacles)
+            {
+                if (obs == null) continue;
+                switch (obs)
+                {
+                    case SphereObstacle s:
+                        _obstacleSnapshot.Add(new ObstacleInfo
+                        {
+                            type = "Sphere",
+                            cx = s.Center.x, cy = s.Center.y, cz = s.Center.z,
+                            radius = s.Radius,
+                            qw = 1f,
+                        });
+                        break;
+                    case BoxObstacle b:
+                        _obstacleSnapshot.Add(new ObstacleInfo
+                        {
+                            type = "Box",
+                            cx = b.Center.x, cy = b.Center.y, cz = b.Center.z,
+                            sx = b.Size.x, sy = b.Size.y, sz = b.Size.z,
+                            qx = b.Rotation.x, qy = b.Rotation.y, qz = b.Rotation.z, qw = b.Rotation.w,
+                        });
+                        break;
+                    case CylinderObstacle c:
+                        _obstacleSnapshot.Add(new ObstacleInfo
+                        {
+                            type = "Cylinder",
+                            cx = c.Center.x, cy = c.Center.y, cz = c.Center.z,
+                            radius = c.Radius,
+                            height = c.Height,
+                            qx = c.Rotation.x, qy = c.Rotation.y, qz = c.Rotation.z, qw = c.Rotation.w,
+                        });
+                        break;
+                    default:
+                        // Unknown obstacle subclass — fall back to base radius/center.
+                        _obstacleSnapshot.Add(new ObstacleInfo
+                        {
+                            type = obs.GetType().Name,
+                            cx = obs.centerObs.x, cy = obs.centerObs.y, cz = obs.centerObs.z,
+                            radius = obs.radiusObs,
+                            qw = 1f,
+                        });
+                        break;
+                }
+            }
+        }
+
+#if UNITY_EDITOR
+        Debug.Log($"[SwarmTrajectoryRecorder] Scene snapshot: {_totalCollectibles} collectibles, {_obstacleSnapshot.Count} obstacles.");
+#endif
     }
 
     /// <summary>
@@ -1296,6 +1584,14 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 
             // Per-frame input snapshots (empty list when logInputs=false)
             inputs = new List<InputFrame>(_inputBuffer),
+
+            // Per-frame swarm-wide snapshot + per-subnetwork rows for gap geometry.
+            swarmFrames = new List<SwarmFrame>(_swarmFrameBuffer),
+            subnetworks = new List<SubnetSnapshot>(_subnetBuffer),
+
+            // One-shot scene data captured at run start.
+            totalCollectibles = _totalCollectibles,
+            obstacles = new List<ObstacleInfo>(_obstacleSnapshot),
         };
 
 

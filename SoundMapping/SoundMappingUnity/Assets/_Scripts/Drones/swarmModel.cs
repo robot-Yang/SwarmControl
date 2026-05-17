@@ -274,6 +274,9 @@ public class swarmModel : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.R))
             restartFunction();
 
+        if (Input.GetKeyDown(KeyCode.T))
+            teleportSwarmToOrigin();
+
         refreshSwarm();
 
         // === New: Ellipsoid-based obstacle evaluation ===
@@ -349,6 +352,39 @@ public class swarmModel : MonoBehaviour
     {
         Debug.Log("----------------------------- Restarting -----------------------------");
         SceneSelectorScript.reset();
+    }
+
+    // Snap every drone in swarmHolder back to its index's spawn-circle slot and zero
+    // its velocity/acceleration. Cheaper than restartFunction() — no scene reload, no
+    // re-instantiation, embodiment is preserved. Useful when the swarm has drifted out
+    // of reach during a study run.
+    void teleportSwarmToOrigin()
+    {
+        if (swarmHolder == null) return;
+
+        Vector3 center = (spawnCenterAnchor != null) ? spawnCenterAnchor.position : spawnCenterWorld;
+        int childCount = swarmHolder.transform.childCount;
+        if (childCount == 0) return;
+
+        Debug.Log($"----------------------------- Teleporting {childCount} drones to origin -----------------------------");
+
+        int slots = Mathf.Max(1, numDrones);
+        foreach (Transform child in swarmHolder.transform)
+        {
+            var dc = child.GetComponent<DroneController>();
+            if (dc == null || dc.droneFake == null) continue;
+
+            int slot = dc.droneFake.id % slots;
+            Vector3 pos = center + new Vector3(
+                spawnRadius * Mathf.Cos(slot * 2 * Mathf.PI / slots),
+                spawnHeight,
+                spawnRadius * Mathf.Sin(slot * 2 * Mathf.PI / slots));
+
+            dc.droneFake.position     = pos;
+            dc.droneFake.velocity     = Vector3.zero;
+            dc.droneFake.acceleration = Vector3.zero;
+            child.position            = pos;
+        }
     }
 
     void refreshParameters()
