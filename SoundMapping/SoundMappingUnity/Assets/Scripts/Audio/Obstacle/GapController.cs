@@ -181,6 +181,17 @@ public class GapsController : MonoBehaviour
         sp.z = firstGapZ - tc.startLineGapOffset;
         trajectoryStartLine.localPosition = sp;
 
+        // Starting_line must sit directly in front of Starting_square (fixed
+        // world X), not aligned to gc_position.x. Override the X in world space
+        // so an OnValidate-triggered Apply doesn't drift it back onto gap[0]'s
+        // randomized column.
+        if (tc.startingSquare != null)
+        {
+            Vector3 wp = trajectoryStartLine.position;
+            wp.x = tc.startingSquare.position.x;
+            trajectoryStartLine.position = wp;
+        }
+
         Vector3 ep = trajectoryEndLine.localPosition;
         ep.x = tc.gc_position.x;
         ep.z = lastGapZ + tc.finishLineGapOffset;
@@ -234,10 +245,14 @@ public class GapsController : MonoBehaviour
         if (gaps.Count == 0)
             return;
 
-        // 2. Sort by current Z position
-        gaps = gaps.OrderBy(g => g.transform.localPosition.z).ToList();
+        // 2. Sort by sibling index (== creation order along the corridor).
+        // Sorting by transform.localPosition.z would break once a rotated segment
+        // exists, because rotated gaps scatter their Z around k*gapSpacing.
+        gaps = gaps.OrderBy(g => g.transform.GetSiblingIndex()).ToList();
 
-        // 3. Assign global gap width and update layout
+        // 3. Assign global gap width and update layout. startZ is taken from the
+        // first unrotated gap (gap[0] is always unrotated under the current
+        // transition-rotation rules).
         float startZ = gaps[0].transform.localPosition.z;
         TestCourse testCourse = GetComponentInParent<TestCourse>();
 
@@ -265,10 +280,15 @@ public class GapsController : MonoBehaviour
                 g.bottomWall.localScale = bs;
             }
 
-            // Reposition along Z
-            Vector3 p = g.transform.localPosition;
-            p.z = startZ + i * gapSpacing;
-            g.transform.localPosition = p;
+            // Reposition along Z only for unrotated gaps. Rotated gaps belong to
+            // a separate corridor segment and are positioned by
+            // TestCourse.PositionRotatedSegment.
+            if (g.gapEulerRotation == Vector3.zero)
+            {
+                Vector3 p = g.transform.localPosition;
+                p.z = startZ + i * gapSpacing;
+                g.transform.localPosition = p;
+            }
 
             if (g.useSquareHole && testCourse != null)
             {
@@ -276,6 +296,9 @@ public class GapsController : MonoBehaviour
                 if (testCourse.squareGapSize > 0f)
                     g.gapSize = testCourse.squareGapSize;
                 g.starEulerRotation = testCourse.starEulerRotation;
+                // Note: gapEulerRotation is NOT propagated here — TestCourse.GenerateGaps
+                // picks a random transition gap and only assigns rotation from that gap
+                // onward. Propagating uniformly here would clobber that choice.
             }
 
             float squareWallCap = g.useSquareHole ? Mathf.Max(g.squareWallSize, gapResolution) : corridorWidth;
