@@ -154,8 +154,14 @@ public class MigrationPointController : MonoBehaviour
         if (reference == null || swarmModel.swarmHolder == null) return null;
 
         Vector3 refPos = reference.position;
-        // Lastmost mode flips the search axis — every downstream check stays the same.
-        Vector3 fwd    = (viewpointMode == ViewpointMode.Lastmost) ? -reference.forward : reference.forward;
+        // Use the smoothed swarm heading instead of reference.forward so the search axis
+        // doesn't flip when we hand off between drones whose individual yaws differ
+        // (which causes Lastmost auto-switch to ping-pong between front and back).
+        Vector3 axis = _headingInitialized
+            ? Vector3.ProjectOnPlane(_swarmHeading, Vector3.up).normalized
+            : Vector3.ProjectOnPlane(reference.forward, Vector3.up).normalized;
+        if (axis.sqrMagnitude < 1e-6f) axis = reference.forward;
+        Vector3 fwd    = (viewpointMode == ViewpointMode.Lastmost) ? -axis : axis;
 
         // Baseline = current embodied drone's forward distance (if any)
         float baselineForward = float.NegativeInfinity;
@@ -391,6 +397,15 @@ public class MigrationPointController : MonoBehaviour
         {
             if (_candidateFrontmost != CameraMovement.embodiedDrone)
             {
+                // Snap the candidate's yaw to swarmHeading before promoting it. Otherwise
+                // a not-yet-aligned candidate drags swarmHeading toward its own forward
+                // post-handoff, which rotates the search axis and re-triggers a flip.
+                if (_headingInitialized)
+                {
+                    Vector3 yawDir = Vector3.ProjectOnPlane(_swarmHeading, Vector3.up).normalized;
+                    if (yawDir.sqrMagnitude > 1e-6f)
+                        _candidateFrontmost.transform.rotation = Quaternion.LookRotation(yawDir, Vector3.up);
+                }
                 _recentlyDepartedDrone = CameraMovement.embodiedDrone;
                 _recentlyDepartedExpiry = Time.time + swapBackCooldown;
                 CameraMovement.nextEmbodiedDrone = _candidateFrontmost;

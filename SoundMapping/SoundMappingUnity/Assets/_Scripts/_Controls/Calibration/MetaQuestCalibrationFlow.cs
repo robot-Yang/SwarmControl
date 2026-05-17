@@ -39,7 +39,11 @@ public class MetaQuestCalibrationFlow : MonoBehaviour
     public KeyCode cancelKey = KeyCode.Escape;
 
     [Header("Timing")]
-    [Tooltip("Seconds to hold each pose before capture.")]
+    [Tooltip("Seconds the participant has to assume the pose (e.g. raise hands to MIN HEIGHT) before the capture countdown starts. Skippable with the advance key.")]
+    [Range(0f, 15f)]
+    public float getReadyPerStep = 4f;
+
+    [Tooltip("Seconds to hold the pose steady while the capture countdown elapses. Skippable with the advance key.")]
     [Range(1f, 10f)]
     public float countdownPerStep = 3f;
 
@@ -74,6 +78,8 @@ public class MetaQuestCalibrationFlow : MonoBehaviour
 
     private Step _step = Step.Idle;
     private float _countdown = 0f;
+    // Each step has two phases: get-ready (assume the pose) → capture countdown (hold steady).
+    private bool _isGettingReady = false;
 
     // Snapshots of the prior calibration so we can roll back on cancel.
     private float _spreadMinBackup,    _spreadNeutralBackup,    _spreadMaxBackup;
@@ -109,8 +115,18 @@ public class MetaQuestCalibrationFlow : MonoBehaviour
 
         if (_countdown <= 0f || skip)
         {
-            CaptureCurrentStep();
-            AdvanceStep();
+            if (_isGettingReady)
+            {
+                // Get-ready phase done: start the capture countdown for the same step.
+                _isGettingReady = false;
+                _countdown = countdownPerStep;
+                if (verboseLogging) Debug.Log($"  [{_step}] get-ready done, capturing in {countdownPerStep:F1}s");
+            }
+            else
+            {
+                CaptureCurrentStep();
+                AdvanceStep();
+            }
         }
     }
 
@@ -122,7 +138,8 @@ public class MetaQuestCalibrationFlow : MonoBehaviour
     {
         TakeBackups();
         _step = Step.SpreadMin;
-        _countdown = countdownPerStep;
+        _isGettingReady = true;
+        _countdown = getReadyPerStep;
         if (verboseLogging) Debug.Log("=== Meta Quest calibration: starting (press Esc to cancel) ===");
     }
 
@@ -144,10 +161,12 @@ public class MetaQuestCalibrationFlow : MonoBehaviour
             if (verboseLogging) Debug.Log("=== Meta Quest calibration: complete ===");
             _step = Step.Idle;
             _backupsTaken = false;
+            _isGettingReady = false;
         }
         else
         {
-            _countdown = countdownPerStep;
+            _isGettingReady = true;
+            _countdown = getReadyPerStep;
         }
     }
 
@@ -192,6 +211,7 @@ public class MetaQuestCalibrationFlow : MonoBehaviour
         if (verboseLogging) Debug.LogWarning("=== Meta Quest calibration: cancelled, rolling back ===");
         RestoreBackups();
         _step = Step.Idle;
+        _isGettingReady = false;
     }
 
     // ============================================
@@ -277,8 +297,11 @@ public class MetaQuestCalibrationFlow : MonoBehaviour
         GUILayout.BeginArea(new Rect(Screen.width / 2 - 320, Screen.height / 2 - 80, 640, 160), GUI.skin.box);
         GUILayout.Label($"<size=22><b>Meta Quest Calibration</b></size>");
         GUILayout.Label($"<size=18>Step: {Prompts[_step]}</size>");
-        GUILayout.Label($"<size=24><color=yellow>Hold steady — {_countdown:F1}s</color></size>");
-        GUILayout.Label($"<size=14>{advanceKey} = capture now    {cancelKey} = cancel</size>");
+        if (_isGettingReady)
+            GUILayout.Label($"<size=24><color=cyan>Get ready — capturing in {_countdown:F1}s</color></size>");
+        else
+            GUILayout.Label($"<size=24><color=yellow>Hold steady — capture in {_countdown:F1}s</color></size>");
+        GUILayout.Label($"<size=14>{advanceKey} = skip phase    {cancelKey} = cancel</size>");
         GUILayout.EndArea();
     }
 }
