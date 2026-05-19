@@ -293,7 +293,7 @@ public class GapsController : MonoBehaviour
             if (g.useSquareHole && testCourse != null)
             {
                 g.squareWallSize = testCourse.wallHeight;
-                if (testCourse.squareGapSize > 0f)
+                if (testCourse.squareGapSize > 0f && !testCourse.useLinearGapSizeSequence)
                     g.gapSize = testCourse.squareGapSize;
                 g.starEulerRotation = testCourse.starEulerRotation;
                 // Note: gapEulerRotation is NOT propagated here — TestCourse.GenerateGaps
@@ -302,7 +302,7 @@ public class GapsController : MonoBehaviour
             }
 
             float squareWallCap = g.useSquareHole ? Mathf.Max(g.squareWallSize, gapResolution) : corridorWidth;
-            if (!g.useSquareHole || testCourse == null || testCourse.squareGapSize <= 0f)
+            if (!g.useSquareHole || testCourse == null || testCourse.squareGapSize <= 0f || testCourse.useLinearGapSizeSequence)
             {
                 float maxAllowedSize = Mathf.Min(maxGapSize, corridorWidth, squareWallCap);
                 float minAllowedSize = Mathf.Min(Mathf.Max(minGapSize, gapResolution), maxAllowedSize);
