@@ -170,6 +170,7 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     
     // --- Collectibles tracking ---
     private static int _collectiblesCounter = 0;
+    private readonly List<CollectibleEvent> _collectibleBuffer = new List<CollectibleEvent>();
 
     // --- Crash event buffer ---
     private readonly List<CrashEvent> _crashBuffer = new List<CrashEvent>();
@@ -186,6 +187,7 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     // --- One-shot scene snapshot, captured on first MarkTrialStart ---
     private int _totalCollectibles = 0;
     private List<ObstacleInfo> _obstacleSnapshot = new List<ObstacleInfo>();
+    private List<CourseLineInfo> _courseLineSnapshot = new List<CourseLineInfo>();
     private bool _sceneSnapshotTaken = false;
 
     // Cached MigrationPointController, resolved lazily.
@@ -263,6 +265,16 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         public float qx, qy, qz, qw;
     }
 
+    [Serializable]
+    public struct CourseLineInfo
+    {
+        public string role;     // "start" or "end"
+        public string name;     // scene object name, e.g. Starting_line
+        public float cx, cy, cz;
+        public float sx, sy, sz;
+        public float qx, qy, qz, qw;
+    }
+
 
     [Serializable]
     public class DroneTraj
@@ -287,6 +299,20 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         public int droneId;        // matches DroneTraj.id
         public string droneName;
         public byte embodied;      // 1 if this drone was the embodied one at crash time
+    }
+
+    /// <summary>
+    /// One collectible pickup event. Captured at the moment a collectible trigger
+    /// fires, before the collectible is destroyed.
+    /// </summary>
+    [Serializable]
+    public struct CollectibleEvent
+    {
+        public float t;            // Time.time at pickup
+        public float tElapsed;     // Timer.elapsedTime at pickup
+        public string name;        // collectible GameObject name, e.g. Star_Gap (4)_5_5
+        public int droneId;        // drone that triggered the pickup
+        public float x, y, z;      // world position of the collectible at pickup
     }
 
 
@@ -365,6 +391,7 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         // --- Collectibles and elapsed time ---
         public int collectiblesPickedUp;  // total collectibles collected during run
         public float elapsedTime;         // time between start and end collider (seconds)
+        public List<CollectibleEvent> collectibles = new List<CollectibleEvent>();
 
         // --- Crashes ---
         public int crashCount;                  // total crashes during the run (== crashes.Count)
@@ -390,6 +417,7 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 
         // --- Scene-static obstacles, captured once at the start of the run ---
         public List<ObstacleInfo> obstacles = new List<ObstacleInfo>();
+        public List<CourseLineInfo> courseLines = new List<CourseLineInfo>();
     }
 
 
@@ -578,10 +606,38 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     
     public static void RecordCollectible()
     {
+        RecordCollectible(string.Empty, int.MinValue, Vector3.zero);
+    }
+
+    public static int CollectiblesPickedUp
+    {
+        get { return _collectiblesCounter; }
+    }
+
+    public static void RecordCollectible(string collectibleName, int droneId, Vector3 position)
+    {
         _collectiblesCounter++;
+        if (_instance != null)
+            _instance.RecordCollectibleInternal(collectibleName, droneId, position);
 #if UNITY_EDITOR
         Debug.Log($"[SwarmTrajectoryRecorder] Collectible recorded. Total: {_collectiblesCounter}");
 #endif
+    }
+
+    private void RecordCollectibleInternal(string collectibleName, int droneId, Vector3 position)
+    {
+        if (_openTrial == null || _openTrial.label != runLabelName) return;
+
+        _collectibleBuffer.Add(new CollectibleEvent
+        {
+            t = Time.time,
+            tElapsed = Timer.elapsedTime,
+            name = collectibleName ?? string.Empty,
+            droneId = droneId,
+            x = position.x,
+            y = position.y,
+            z = position.z
+        });
     }
 
     /// <summary>
@@ -653,16 +709,10 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 
         // Reset collectibles counter for new run
         _collectiblesCounter = 0;
+        _collectibleBuffer.Clear();
 
         // Reset crash buffer for new run
         _crashBuffer.Clear();
-
-        // Reset input buffer for new run
-        _inputBuffer.Clear();
-
-        // Reset swarm-wide and subnetwork buffers for new run
-        _swarmFrameBuffer.Clear();
-        _subnetBuffer.Clear();
 
         // One-shot scene snapshot (total collectibles + obstacle list).
         // Done here rather than at scene-load so collectibles spawned by trial
@@ -754,6 +804,7 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
 
         _totalCollectibles = 0;
         _obstacleSnapshot.Clear();
+        _courseLineSnapshot.Clear();
         _sceneSnapshotTaken = false;
 
         _embodiedTransform = null;
@@ -1251,6 +1302,7 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         catch { /* tag may not exist */ }
 
         _obstacleSnapshot.Clear();
+        _courseLineSnapshot.Clear();
         var obstacles = ClosestPointCalculator.obstacles;
         if (obstacles != null)
         {
@@ -1301,9 +1353,66 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
             }
         }
 
+        CaptureCourseLines();
+
 #if UNITY_EDITOR
-        Debug.Log($"[SwarmTrajectoryRecorder] Scene snapshot: {_totalCollectibles} collectibles, {_obstacleSnapshot.Count} obstacles.");
+        Debug.Log($"[SwarmTrajectoryRecorder] Scene snapshot: {_totalCollectibles} collectibles, {_obstacleSnapshot.Count} obstacles, {_courseLineSnapshot.Count} course lines.");
 #endif
+    }
+
+    private void CaptureCourseLines()
+    {
+        TestCourse tc = FindObjectOfType<TestCourse>();
+        if (tc != null)
+        {
+            AddCourseLineSnapshot(tc.TrajectoryStartLine(), "start");
+            AddCourseLineSnapshot(tc.TrajectoryEndLine(), "end");
+            AddCourseLineSnapshot(tc.startingSquare, "startSquare");
+            return;
+        }
+
+        AddCourseLineSnapshot(GameObject.Find("Starting_line")?.transform, "start");
+        AddCourseLineSnapshot(GameObject.Find("Ending_line")?.transform, "end");
+        AddCourseLineSnapshot(GameObject.Find("Starting_square")?.transform, "startSquare");
+    }
+
+    private void AddCourseLineSnapshot(Transform tr, string role)
+    {
+        if (tr == null) return;
+        Quaternion q = tr.rotation;
+        Vector3 p = tr.position;
+        Vector3 s = tr.lossyScale;
+
+        BoxCollider box = tr.GetComponent<BoxCollider>();
+        if (box != null)
+        {
+            p = tr.TransformPoint(box.center);
+            Vector3 localSize = box.size;
+            Vector3 scale = tr.lossyScale;
+            s = new Vector3(
+                Mathf.Abs(localSize.x * scale.x),
+                Mathf.Abs(localSize.y * scale.y),
+                Mathf.Abs(localSize.z * scale.z)
+            );
+        }
+        else
+        {
+            Renderer renderer = tr.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                p = renderer.bounds.center;
+                s = renderer.bounds.size;
+            }
+        }
+
+        _courseLineSnapshot.Add(new CourseLineInfo
+        {
+            role = role,
+            name = tr.name,
+            cx = p.x, cy = p.y, cz = p.z,
+            sx = s.x, sy = s.y, sz = s.z,
+            qx = q.x, qy = q.y, qz = q.z, qw = q.w
+        });
     }
 
     /// <summary>
@@ -1577,6 +1686,7 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
             // Collectibles and elapsed time
             collectiblesPickedUp = _collectiblesCounter,
             elapsedTime = elapsedTime,
+            collectibles = new List<CollectibleEvent>(_collectibleBuffer),
 
             // Crashes — full event list, plus aggregate count for quick scanning
             crashCount = _crashBuffer.Count,
@@ -1592,6 +1702,7 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
             // One-shot scene data captured at run start.
             totalCollectibles = _totalCollectibles,
             obstacles = new List<ObstacleInfo>(_obstacleSnapshot),
+            courseLines = new List<CourseLineInfo>(_courseLineSnapshot),
         };
 
 
@@ -1717,4 +1828,3 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         return null;
     }
 }
-

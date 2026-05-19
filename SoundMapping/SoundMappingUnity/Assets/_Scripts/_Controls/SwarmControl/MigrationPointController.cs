@@ -51,23 +51,25 @@ public class MigrationPointController : MonoBehaviour
     private Vector3 _swarmHeading = Vector3.forward; // world-space, horizontal
     private bool _headingInitialized = false;
 
-    public enum ViewpointMode { Frontmost, Lastmost }
+    // === Embodiment endpoint selection mode ===
+    public enum EmbodimentSelectionMode { Frontmost, Backmost }
 
-    // === Auto-frontmost switching (config) ===
-    [Header("Auto Frontmost Switching")]
-    public bool autoSwitchFrontmost = true;   // turn on/off
-    [Tooltip("Frontmost = drone furthest along the embodied drone's facing direction. Lastmost = furthest in the opposite direction.")]
-    public ViewpointMode viewpointMode = ViewpointMode.Frontmost;
+    // === Auto endpoint-switching (config) ===
+    [Header("Auto Endpoint Switching")]
+    [Tooltip("Which end of the swarm (along the embodied drone's forward axis) to hand off embodiment to. " +
+             "Frontmost = pick the drone furthest ahead. Backmost = pick the drone furthest behind.")]
+    public EmbodimentSelectionMode selectionMode = EmbodimentSelectionMode.Backmost;
+    public bool autoSwitchFrontmost = true;   // turn on/off (kept name for inspector backward-compat)
     public float checkInterval = 0.15f;       // seconds between checks
     public float maxViewAngleDeg = 360f;       // view cone half-angle
-    public float minForwardDist = 0.01f;       // must be at least this far ahead
+    public float minForwardDist = 0.01f;       // must be at least this far past the embodied drone (in the chosen direction)
     public float minHoldTime = 0.5f;          // must stay best for this long before switching
     public float minSwitchCooldown = 1.0f;    // cooldown after a switch to avoid flip-flop
 
-    [Tooltip("Block swapping back to the just-departed drone for this many seconds — prevents A↔B ping-pong when drones overshoot near the embodied position.")]
+    [Tooltip("Block swapping back to the just-departed drone for this many seconds to prevent A/B ping-pong.")]
     public float swapBackCooldown = 2.0f;
 
-    // === Auto-frontmost switching (runtime state) ===
+    // === Auto endpoint-switching (runtime state) ===
     float _nextCheckTime = 0f;
     GameObject _candidateFrontmost = null;
     float _candidateSinceTime = 0f;
@@ -85,8 +87,9 @@ public class MigrationPointController : MonoBehaviour
     public bool allowManualSelection = false;    // disables selection by buttons 4/5 when false
     public bool allowManualEmbodiment = false;   // disables button 0 embodiment when false
 
-    [Header("Frontmost Sensitivity")]
-    [Tooltip("Candidate must be at least this much farther forward than the current embodied drone (in meters).")]
+    [Header("Endpoint Sensitivity")]
+    [Tooltip("Candidate must be at least this much farther past the current embodied drone in the chosen direction " +
+             "(forward for Frontmost, backward for Backmost), in meters.")]
     public float frontLeadThreshold = 0.5f;
 
     [Tooltip("Reject candidates farther than this lateral distance from the viewing axis (in meters).")]
@@ -146,6 +149,16 @@ public class MigrationPointController : MonoBehaviour
     //     return best;
     // }
 
+    // Returns +1 for Frontmost (look along reference.forward) or -1 for Backmost (look opposite).
+    // Centralized so any future logic that needs the chosen direction stays consistent.
+    float SelectionDirectionSign()
+    {
+        return (selectionMode == EmbodimentSelectionMode.Backmost) ? -1f : 1f;
+    }
+
+    // Picks the most-forward or most-backward drone (relative to `reference.forward`) depending
+    // on `selectionMode`. By signing the forward projection we keep one code path for both modes:
+    // a positive `signedForward` always means "further along the chosen direction".
     GameObject FindFrontmostDroneInView(Transform reference,
                                         float maxAngleDeg,
                                         float minFwd,
@@ -156,14 +169,15 @@ public class MigrationPointController : MonoBehaviour
         Vector3 refPos = reference.position;
         // Use the smoothed swarm heading instead of reference.forward so the search axis
         // doesn't flip when we hand off between drones whose individual yaws differ
-        // (which causes Lastmost auto-switch to ping-pong between front and back).
+        // (which causes endpoint auto-switch to ping-pong between front and back).
         Vector3 axis = _headingInitialized
             ? Vector3.ProjectOnPlane(_swarmHeading, Vector3.up).normalized
             : Vector3.ProjectOnPlane(reference.forward, Vector3.up).normalized;
         if (axis.sqrMagnitude < 1e-6f) axis = reference.forward;
-        Vector3 fwd    = (viewpointMode == ViewpointMode.Lastmost) ? -axis : axis;
+        float   dir    = SelectionDirectionSign();        // +1 Frontmost, -1 Backmost
+        Vector3 fwd    = axis * dir;                      // axis we score against
 
-        // Baseline = current embodied drone's forward distance (if any)
+        // Baseline = current embodied drone's signed forward distance (if any)
         float baselineForward = float.NegativeInfinity;
         if (CameraMovement.embodiedDrone != null)
         {
@@ -182,7 +196,7 @@ public class MigrationPointController : MonoBehaviour
             if (CameraMovement.embodiedDrone != null && go == CameraMovement.embodiedDrone)
                 continue;
 
-            // Block the drone we just departed from (prevents A->B->A ping-pong when drones overshoot)
+            // Block the drone we just departed from to avoid immediate A/B swap-back.
             if (_recentlyDepartedDrone != null && go == _recentlyDepartedDrone && Time.time < _recentlyDepartedExpiry)
                 continue;
 
@@ -194,7 +208,7 @@ public class MigrationPointController : MonoBehaviour
                     continue;
             }
 
-            // Geometry relative to reference (embodied or camera)
+            // Geometry relative to reference, projected along the *chosen* axis (front or back)
             Vector3 diff        = t.position - refPos;
             float   forwardDist = Vector3.Dot(diff, fwd);
             if (forwardDist < minFwd) continue;
@@ -210,13 +224,13 @@ public class MigrationPointController : MonoBehaviour
             if (maxCandidateLateral > 0f && lateralMag > maxCandidateLateral)
                 continue;
 
-            // 2) Must lead the current embodied by a clear margin
+            // 2) Must lead the current embodied by a clear margin (in the chosen direction)
             if (!float.IsNegativeInfinity(baselineForward) &&
                 (forwardDist - baselineForward) < frontLeadThreshold)
                 continue;
 
-            // Score: prefer more forward; tie-break by smaller lateral
-            float score = forwardDist - 0.1f * lateralMag; // small penalty for off-axis
+            // Score: prefer drones further along the chosen direction; small penalty for off-axis
+            float score = forwardDist - 0.1f * lateralMag;
             if (score > bestScore)
             {
                 bestScore = score;
@@ -410,7 +424,7 @@ public class MigrationPointController : MonoBehaviour
                 _recentlyDepartedExpiry = Time.time + swapBackCooldown;
                 CameraMovement.nextEmbodiedDrone = _candidateFrontmost;
                 _lastSwitchTime = Time.time;
-                Debug.Log($"[AutoSwitch] Next embodied ({viewpointMode}/main-group): " +
+                Debug.Log($"[AutoSwitch] Next embodied ({selectionMode}/main-group): " +
                         _candidateFrontmost.GetComponent<DroneController>().droneFake.id);
             }
             _candidateSinceTime = Time.time;
@@ -502,10 +516,6 @@ public class MigrationPointController : MonoBehaviour
                 {
                     Dictionary<GameObject, float> scores = new Dictionary<GameObject, float>();
 
-                    Vector3 selFwd = (viewpointMode == ViewpointMode.Lastmost)
-                        ? -CameraMovement.embodiedDrone.transform.forward
-                        :  CameraMovement.embodiedDrone.transform.forward;
-
                     foreach(Transform drone in swarmModel.swarmHolder.transform)
                     {
                         if(drone.gameObject == CameraMovement.embodiedDrone)
@@ -515,7 +525,7 @@ public class MigrationPointController : MonoBehaviour
 
 
                         Vector3 diff = drone.position - CameraMovement.embodiedDrone.transform.position;
-                        float score = Vector3.Dot(diff, selFwd);
+                        float score = Vector3.Dot(diff, CameraMovement.embodiedDrone.transform.forward);
 
                         if(score > 0.5)
                         {

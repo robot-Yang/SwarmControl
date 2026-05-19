@@ -73,9 +73,15 @@ public class TestCourse : MonoBehaviour
     public bool generate3DGaps = true;
     [Tooltip("Set to 0 to randomize each square hole side length using the GapsController min/max range.")]
     public float squareGapSize = 0f;
+    [Tooltip("Use a fixed linear sequence of gap sizes from minSquareGapSize to maxSquareGapSize instead of per-gap random sizes.")]
+    public bool useLinearGapSizeSequence = true;
+    [Tooltip("Randomly shuffle the linear gap size sequence each time Generate is pressed.")]
+    public bool randomizeLinearGapSizeOrder = true;
     public Vector3 starEulerRotation = new Vector3(0f, -90f, 0f);
     [Tooltip("Rotation applied to each gap.transform around its center (degrees). Since gap.transform sits at the wall/gap center, this rotates the entire gap+walls+stars around the center axis without moving the center.")]
     public Vector3 gapEulerRotation = new Vector3(0f, 90f, 0f);
+    [Tooltip("Zero-based gap index where the rotated segment starts. Set to -1 to randomly choose between Gap (2) and the second-to-last gap.")]
+    public int rotationStartGapIndex = -1;
     public float[] initialGapCenterHeights = new float[]
     {
         25f, 35f, 45f, 30f, 40f, 50f, 32.5f
@@ -92,6 +98,7 @@ public class TestCourse : MonoBehaviour
     public string wallPrefabFolder = "Assets/Prefab/DronePrefabUtilities";
 
     private GameObject wallPrefab;
+    private float[] generatedGapSizes;
 
     [HideInInspector]
     public Transform startLine;
@@ -588,6 +595,8 @@ public class TestCourse : MonoBehaviour
         controller.gapSpacing = gapSpacing;
         controller.gapWidth = wallThickness;
 
+        PrepareGapSizeSequence();
+
         // Create gaps RELATIVE TO gc_position
         for (int i = 0; i < NB_GAPS; i++)
             CreateGap(gc.transform, i);
@@ -614,6 +623,7 @@ public class TestCourse : MonoBehaviour
             // before the second Apply so the scene-final state still has gap[0]
             // pinned to Starting_square.
             LockGap0ToStartingSquare(gc.transform);
+            UpdateTransitionRotationDirection(gc.transform);
             controller.Apply();
             PositionRotatedSegment(gc.transform);
         }
@@ -682,6 +692,7 @@ public class TestCourse : MonoBehaviour
     private void RandomizeCentersUntilAtLeastTarget(Gap[] gaps, float fixedZSpacing, float targetTotalDistance)
     {
         const int maxAttempts = 200;
+        bool preserveGap0 = lockGap0ToStartingSquare && startingSquare != null && gaps.Length > 0;
         float bestTotalDistance = TotalGapCenterDistanceForSpacing(gaps, fixedZSpacing, 1f);
         Vector2[] bestCenters = GetGapCenters(gaps);
 
@@ -689,6 +700,9 @@ public class TestCourse : MonoBehaviour
         {
             for (int i = 0; i < gaps.Length; i++)
             {
+                if (preserveGap0 && i == 0)
+                    continue;
+
                 gaps[i].gapCenterX = RandomInRange(randomGapCenterXRange);
                 gaps[i].gapCenterY = RandomInRange(GetSafeGapCenterYRange());
                 ClampGapCenter(gaps[i]);
@@ -851,7 +865,7 @@ public class TestCourse : MonoBehaviour
             segments.Add($"Gap {i + 1}->{i + 2}: {distance:F2}");
         }
 
-        Debug.Log($"[TestCourse] Gap distance summary: total={totalDistance:F2}; {string.Join(", ", segments)}");
+        Debug.Log($"[TestCourse] Gap distance summary (local): total={totalDistance:F2}; {string.Join(", ", segments)}");
     }
 
     private Vector3 GapCenterLocalPosition(Gap gap)
@@ -874,7 +888,12 @@ public class TestCourse : MonoBehaviour
         if (generate3DGaps)
         {
             gap.squareWallSize = wallHeight;
-            if (squareGapSize > 0f)
+            if (TryGetGeneratedGapSize(index, out float generatedGapSize))
+            {
+                gap.gapSize = generatedGapSize;
+                gap.gapHeight = generatedGapSize;
+            }
+            else if (squareGapSize > 0f)
             {
                 gap.gapSize = squareGapSize;
                 gap.gapHeight = squareGapSize;
@@ -972,6 +991,70 @@ public class TestCourse : MonoBehaviour
         gap.Initialize();
     }
 
+    private void PrepareGapSizeSequence()
+    {
+        generatedGapSizes = null;
+        if (!useLinearGapSizeSequence || NB_GAPS <= 0)
+            return;
+
+        generatedGapSizes = BuildLinearGapSizeSequence(NB_GAPS);
+        if (randomizeLinearGapSizeOrder)
+            Shuffle(generatedGapSizes);
+
+        List<string> labels = new List<string>();
+        for (int i = 0; i < generatedGapSizes.Length; i++)
+            labels.Add(generatedGapSizes[i].ToString("F2"));
+        Debug.Log($"[TestCourse] Gap size sequence: {string.Join(", ", labels)}");
+    }
+
+    private float[] BuildLinearGapSizeSequence(int count)
+    {
+        float wallCap = generate3DGaps ? Mathf.Max(wallHeight, gapSizeStep) : corridorWidth;
+        float maxAllowedSize = Mathf.Min(maxSquareGapSize, corridorWidth, wallCap);
+        float minAllowedSize = Mathf.Min(Mathf.Max(minSquareGapSize, gapSizeStep), maxAllowedSize);
+
+        float[] sizes = new float[count];
+        if (count == 1)
+        {
+            sizes[0] = maxAllowedSize;
+            return sizes;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            float t = i / (float)(count - 1);
+            sizes[i] = Mathf.Lerp(minAllowedSize, maxAllowedSize, t);
+        }
+
+        return sizes;
+    }
+
+    private void Shuffle(float[] values)
+    {
+        if (values == null)
+            return;
+
+        for (int i = values.Length - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            float tmp = values[i];
+            values[i] = values[j];
+            values[j] = tmp;
+        }
+    }
+
+    private bool TryGetGeneratedGapSize(int index, out float gapSize)
+    {
+        if (generatedGapSizes != null && index >= 0 && index < generatedGapSizes.Length)
+        {
+            gapSize = generatedGapSizes[index];
+            return true;
+        }
+
+        gapSize = 0f;
+        return false;
+    }
+
     // Pin gap[0] to a fixed location: same world X as Starting_square (so it's
     // directly in front of Starting_line) and a fixed height from
     // initialGapCenterHeights[0]. Overrides anything initialGapCenters[0] or
@@ -1030,15 +1113,71 @@ public class TestCourse : MonoBehaviour
             return;
         }
 
-        // Pick k in [2, NB_GAPS - 2]. Random.Range(int, int) is [min, max).
+        // Pick k in [2, NB_GAPS - 2]. rotationStartGapIndex < 0 keeps the
+        // previous random behavior.
         int minK = 2;
-        int maxKExclusive = gaps.Length - 1; // so picks include gaps.Length - 2
-        int k = Random.Range(minK, maxKExclusive);
+        int maxK = gaps.Length - 2;
+        int k = rotationStartGapIndex < 0
+            ? Random.Range(minK, maxK + 1)
+            : Mathf.Clamp(rotationStartGapIndex, minK, maxK);
 
+        if (rotationStartGapIndex >= 0 && k != rotationStartGapIndex)
+        {
+            Debug.LogWarning(
+                $"[TestCourse] rotationStartGapIndex={rotationStartGapIndex} was clamped to Gap ({k}). " +
+                $"Valid range is Gap ({minK}) through Gap ({maxK}).");
+        }
+
+        Vector3 transitionRotation = RotationForTransitionDirection(gaps, k);
         for (int i = k; i < gaps.Length; i++)
-            gaps[i].gapEulerRotation = gapEulerRotation;
+            gaps[i].gapEulerRotation = transitionRotation;
 
-        Debug.Log($"[TestCourse] Transition gap = Gap ({k}); gaps {k}..{gaps.Length - 1} rotated by {gapEulerRotation}.");
+        Debug.Log($"[TestCourse] Transition gap = Gap ({k}); gaps {k}..{gaps.Length - 1} rotated by {transitionRotation}.");
+    }
+
+    private void UpdateTransitionRotationDirection(Transform gapControllerRoot)
+    {
+        Gap[] gaps = gapControllerRoot.GetComponentsInChildren<Gap>(includeInactive: true);
+        if (gaps.Length == 0)
+            return;
+
+        System.Array.Sort(gaps, (a, b) =>
+            a.transform.GetSiblingIndex().CompareTo(b.transform.GetSiblingIndex()));
+
+        int transitionIdx = -1;
+        for (int i = 0; i < gaps.Length; i++)
+        {
+            if (gaps[i].gapEulerRotation != Vector3.zero)
+            {
+                transitionIdx = i;
+                break;
+            }
+        }
+        if (transitionIdx <= 0)
+            return;
+
+        Vector3 transitionRotation = RotationForTransitionDirection(gaps, transitionIdx);
+        for (int i = transitionIdx; i < gaps.Length; i++)
+            gaps[i].gapEulerRotation = transitionRotation;
+
+        Debug.Log($"[TestCourse] Transition direction updated: Gap ({transitionIdx}) dx={gaps[transitionIdx].gapCenterX - gaps[transitionIdx - 1].gapCenterX:F2}, rotation={transitionRotation}.");
+    }
+
+    private Vector3 RotationForTransitionDirection(Gap[] gaps, int transitionIndex)
+    {
+        Vector3 rotation = gapEulerRotation;
+        if (gaps == null || transitionIndex <= 0 || transitionIndex >= gaps.Length)
+            return rotation;
+
+        float dxFromPreviousGap = gaps[transitionIndex].gapCenterX - gaps[transitionIndex - 1].gapCenterX;
+        if (Mathf.Approximately(dxFromPreviousGap, 0f) || Mathf.Approximately(rotation.y, 0f))
+            return rotation;
+
+        // In Unity, +Y yaw maps local +Z toward +X, so use +yaw when the
+        // transition gap is to the right of the previous gap and -yaw when it is
+        // to the left. Keep the user-configured yaw magnitude.
+        rotation.y = Mathf.Abs(rotation.y) * Mathf.Sign(dxFromPreviousGap);
+        return rotation;
     }
 
     private void PositionRotatedSegment(Transform gapControllerRoot)
