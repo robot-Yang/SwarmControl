@@ -16,27 +16,31 @@ public class SimpleCollectibleScript : MonoBehaviour {
 
 	public bool preserveInitialRotation;
 
+	[Header("Collection Trigger")]
+	public Vector3 embodiedColliderSize = new Vector3(2f, 6f, 2f);
+	public Vector3 nonEmbodiedColliderSize = new Vector3(6f, 2f, 2f);
+
 	public AudioClip collectSound;
 
 	public GameObject collectEffect;
 
 	// Use this for initialization
 	void Start () {
-		if (preserveInitialRotation)
-			return;
-
 		if(LevelConfiguration._startEmbodied)
 		{
-			transform.rotation = Quaternion.Euler(0, 0, 0);
-			//scale box collider to 1 6 1
+			if (!preserveInitialRotation)
+				transform.rotation = Quaternion.Euler(0, 0, 0);
+
 			BoxCollider boxCollider = GetComponent<BoxCollider>();
-			boxCollider.size = new Vector3(1, 6, 1);
+			boxCollider.size = embodiedColliderSize;
 		}
 		else
 		{
-			transform.rotation = Quaternion.Euler(0, 0, 90);
+			if (!preserveInitialRotation)
+				transform.rotation = Quaternion.Euler(0, 0, 90);
+
 			BoxCollider boxCollider = GetComponent<BoxCollider>();
-			boxCollider.size = new Vector3(6, 1, 1);
+			boxCollider.size = nonEmbodiedColliderSize;
 		}
 	}
 	
