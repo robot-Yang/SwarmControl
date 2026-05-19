@@ -651,6 +651,10 @@ public class InputFusionManager : MonoBehaviour
         GUILayout.Label($"Movement: {SwarmMovement}");
         GUILayout.Label($"Spread: {SwarmSpread:F2}  Height: {SwarmMovement.y:F2}");
         GUILayout.Label($"Camera Rotation OUTPUT: {CameraRotation:F2}");
+        if (LevelConfiguration._CollectibleNumber > 0)
+        {
+            GUILayout.Label($"Stars Collected: {SwarmTrajectoryRecorder.CollectiblesPickedUp}/{LevelConfiguration._CollectibleNumber}");
+        }
         GUILayout.Label($"ArmIMU: {(useArmIMUForSpreadHeight ? (ArmIMUAvailable() ? "<color=lime>ON</color>" : "<color=red>MISSING</color>") : "off")}");
         GUILayout.Label($"MetaHands H/S: {(useMetaHandsForHeight ? (MetaHandHeightAvailable() ? "<color=lime>H-ON</color>" : "<color=red>H-MISS</color>") : "h-off")} / {(useMetaHandsForSpread ? (MetaHandSpreadAvailable() ? "<color=lime>S-ON</color>" : "<color=red>S-MISS</color>") : "s-off")}");
         GUILayout.Label($"Controllers H/S: {(useControllersForHeight ? (controllerHeightInput != null && controllerHeightInput.IsAvailable ? "<color=lime>H-ON</color>" : "<color=red>H-MISS</color>") : "h-off")} / {(useControllersForSpread ? (controllerSpreadInput != null && controllerSpreadInput.IsAvailable ? "<color=lime>S-ON</color>" : "<color=red>S-MISS</color>") : "s-off")}");

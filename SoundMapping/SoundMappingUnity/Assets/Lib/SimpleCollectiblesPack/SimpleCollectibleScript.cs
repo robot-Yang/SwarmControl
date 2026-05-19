@@ -53,8 +53,9 @@ public class SimpleCollectibleScript : MonoBehaviour {
 	{
 		if (other.tag == "Drone") {
 			//string starName, float timeCollected, int droneId, Vector3 position
-			saveInfoToJSON.addStarData(this.name, Timer.elapsedTime, other.gameObject.GetComponent<DroneController>().droneFake.id, transform.position);
-			SwarmTrajectoryRecorder.RecordCollectible(); // Track collectible pickup
+			int droneId = other.gameObject.GetComponent<DroneController>().droneFake.id;
+			saveInfoToJSON.addStarData(this.name, Timer.elapsedTime, droneId, transform.position);
+			SwarmTrajectoryRecorder.RecordCollectible(this.name, droneId, transform.position); // Track collectible pickup
 			Collect ();
 		}
 	}

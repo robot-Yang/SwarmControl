@@ -9,11 +9,12 @@ Usage (from anywhere):
 
 What gets produced (PNGs in <outdir>):
     <stem>_trajectory.png    - top-down (XZ) drone paths + obstacles + crash markers
-    <stem>_trajectory_3d.png - 3D drone paths + obstacles (wireframes/faces) + crashes
+    <stem>_trajectory_3d.png - 3D drone paths + obstacles/course lines + crashes
     <stem>_swarm_health.png  - subnetworks/main/disconnected/cumulative crashes over time
     <stem>_crashes.png       - crash timeline (when, which drone, embodied flag)
     <stem>_inputs.png        - fused movement/spread/rotation + per-source rotation breakdown
     <stem>_gaps.png          - subnetwork centroids during gaps (color = time, size scales with drones)
+    <stem>_collectibles_by_gap.png - collected stars per generated gap
     <stem>_summary.png       - text card with headline stats
 
 Run with the SwarmControl uv env:
@@ -23,12 +24,15 @@ Run with the SwarmControl uv env:
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 from pathlib import Path
+import re
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.widgets import Slider
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection  # noqa: F401 -- registers 3d projection
 
 
@@ -115,6 +119,76 @@ def _obstacle_patches_xz(obstacles: list, **patch_kwargs) -> list:
     return out
 
 
+def _course_line_patches_xz(course_lines: list) -> list:
+    """Build patches for Starting_line / Ending_line overlays in top-down XZ."""
+    out = []
+    for line in course_lines or []:
+        cx, cz = float(line["cx"]), float(line["cz"])
+        sx = float(line.get("sx", 1.0))
+        sz = float(line.get("sz", 1.0))
+        yaw = _yaw_from_quat(line.get("qw", 1.0), line.get("qx", 0.0),
+                             line.get("qy", 0.0), line.get("qz", 0.0))
+        half = np.array([[-sx / 2, -sz / 2],
+                         [ sx / 2, -sz / 2],
+                         [ sx / 2,  sz / 2],
+                         [-sx / 2,  sz / 2]])
+        c, s = np.cos(yaw), np.sin(yaw)
+        R = np.array([[c, -s], [s, c]])
+        corners = (R @ half.T).T + np.array([cx, cz])
+        role = line.get("role", "")
+        color = _course_marker_color(role)
+        label = _course_marker_label(role)
+        out.append(mpatches.Polygon(corners, facecolor=color, alpha=0.18,
+                                    edgecolor=color, linewidth=1.8, label=label))
+    return out
+
+
+def _course_marker_color(role: str) -> str:
+    if role == "start":
+        return "tab:green"
+    if role == "end":
+        return "tab:red"
+    if role == "startSquare":
+        return "tab:cyan"
+    return "tab:gray"
+
+
+def _course_marker_label(role: str) -> str:
+    if role == "start":
+        return "starting line"
+    if role == "end":
+        return "ending line"
+    if role == "startSquare":
+        return "starting square"
+    return "course marker"
+
+
+def _match_unity_scene_top_view(ax) -> None:
+    """Use the XZ projection seen from Unity +Y looking downward."""
+    # Keep +Z upward on the plot. This is the direct XZ projection when viewing
+    # the scene from positive Y toward the ground.
+    return None
+
+
+def _unity_to_plot3d(x, y, z):
+    """Map Unity world coordinates to matplotlib display coordinates.
+
+    Unity uses Y as the vertical axis; matplotlib's 3D vertical axis is its
+    third coordinate. Display as X / Z / Y so the horizontal plane matches the
+    2D top-down XZ plot and height is visually vertical.
+    """
+    return x, z, y
+
+
+def _embodied_segments(mask: np.ndarray) -> list[tuple[int, int]]:
+    """Return [start, end) spans where a per-frame embodied mask is true."""
+    if mask.size == 0 or not np.any(mask):
+        return []
+    padded = np.concatenate(([False], mask.astype(bool), [False]))
+    changes = np.flatnonzero(padded[1:] != padded[:-1])
+    return [(int(changes[i]), int(changes[i + 1])) for i in range(0, len(changes), 2)]
+
+
 # --------------------------------------------------------------------------- #
 # Plots
 # --------------------------------------------------------------------------- #
@@ -135,10 +209,12 @@ def plot_trajectory_2d(log: dict, ax=None, stride: int = 1):
 
     for p in _obstacle_patches_xz(log.get("obstacles", [])):
         ax.add_patch(p)
+    for p in _course_line_patches_xz(log.get("courseLines", [])):
+        ax.add_patch(p)
 
     trajs = log.get("trajectories", [])
-    embodied_id = log.get("embodiedId", None)
     cmap = plt.get_cmap("tab20")
+    embodied_label_used = False
 
     for i, drone in enumerate(trajs):
         frames = drone.get("frames", [])
@@ -151,18 +227,16 @@ def plot_trajectory_2d(log: dict, ax=None, stride: int = 1):
             sampled = list(sampled) + [frames[-1]]
         xs = np.fromiter((f["x"] for f in sampled), dtype=float, count=len(sampled))
         zs = np.fromiter((f["z"] for f in sampled), dtype=float, count=len(sampled))
+        emb = np.fromiter((f.get("e", 0) for f in sampled), dtype=int, count=len(sampled)) > 0
 
-        if drone.get("id") == embodied_id:
-            ax.plot(xs, zs, color="red", lw=2.0, alpha=0.95, zorder=5,
-                    label=f"embodied ({drone.get('name', '?')})")
-            # Always anchor markers to the true endpoints, not the strided sample.
-            f0, fL = frames[0], frames[-1]
-            ax.scatter([f0["x"]], [f0["z"]], marker="o", s=80, facecolor="white",
-                       edgecolor="red", zorder=7, label="embodied start")
-            ax.scatter([fL["x"]], [fL["z"]], marker="s", s=80, facecolor="white",
-                       edgecolor="red", zorder=7, label="embodied end")
-        else:
-            ax.plot(xs, zs, color=cmap(i % 20), lw=0.7, alpha=0.7)
+        ax.plot(xs, zs, color=cmap(i % 20), lw=0.7, alpha=0.45)
+        for start, end in _embodied_segments(emb):
+            if end - start < 2:
+                continue
+            label = "embodied segment" if not embodied_label_used else None
+            ax.plot(xs[start:end], zs[start:end], color="red", lw=2.2,
+                    alpha=0.95, zorder=5, label=label)
+            embodied_label_used = True
 
     crashes = log.get("crashes", [])
     if crashes:
@@ -172,6 +246,7 @@ def plot_trajectory_2d(log: dict, ax=None, stride: int = 1):
 
     ax.set_aspect("equal", adjustable="datalim")
     ax.set_xlabel("X (m)"); ax.set_ylabel("Z (m)")
+    _match_unity_scene_top_view(ax)
     title_extra = f"  (stride={stride})" if stride > 1 else ""
     ax.set_title(f"Trajectory + obstacles + crashes — "
                  f"PID {log.get('pid','?')} ({log.get('haptics','?')}/{log.get('order','?')})"
@@ -211,7 +286,8 @@ def _add_obstacle_3d(ax, o: dict, color: str = "#888888", alpha: float = 0.18) -
         x = cx + r * np.outer(np.cos(u), np.sin(v))
         z = cz + r * np.outer(np.sin(u), np.sin(v))
         y = cy + r * np.outer(np.ones_like(u), np.cos(v))
-        ax.plot_wireframe(x, y, z, color=color, alpha=alpha, linewidth=0.5)
+        px, py, pz = _unity_to_plot3d(x, y, z)
+        ax.plot_wireframe(px, py, pz, color=color, alpha=alpha, linewidth=0.5)
     elif t == "Cylinder":
         r = float(o.get("radius", 0.5))
         h = float(o.get("height", 1.0))
@@ -224,7 +300,8 @@ def _add_obstacle_3d(ax, o: dict, color: str = "#888888", alpha: float = 0.18) -
             ring = circle.copy()
             ring[:, 1] = y_local
             world = (R @ ring.T).T + np.array([cx, cy, cz])
-            ax.plot(world[:, 0], world[:, 1], world[:, 2],
+            px, py, pz = _unity_to_plot3d(world[:, 0], world[:, 1], world[:, 2])
+            ax.plot(px, py, pz,
                     color=color, alpha=alpha, linewidth=0.7)
         # Vertical struts at a few angles so the wireframe reads as a tube.
         for k in range(0, len(theta), 4):
@@ -233,7 +310,8 @@ def _add_obstacle_3d(ax, o: dict, color: str = "#888888", alpha: float = 0.18) -
                 [r * np.cos(theta[k]),  h / 2, r * np.sin(theta[k])],
             ])
             world = (R @ seg.T).T + np.array([cx, cy, cz])
-            ax.plot(world[:, 0], world[:, 1], world[:, 2],
+            px, py, pz = _unity_to_plot3d(world[:, 0], world[:, 1], world[:, 2])
+            ax.plot(px, py, pz,
                     color=color, alpha=alpha, linewidth=0.5)
     elif t == "Box":
         sx, sy, sz = float(o.get("sx", 1)), float(o.get("sy", 1)), float(o.get("sz", 1))
@@ -247,6 +325,8 @@ def _add_obstacle_3d(ax, o: dict, color: str = "#888888", alpha: float = 0.18) -
             [ h[0],  h[1],  h[2]], [-h[0],  h[1],  h[2]],
         ])
         corners = (R @ corners_local.T).T + np.array([cx, cy, cz])
+        px, py, pz = _unity_to_plot3d(corners[:, 0], corners[:, 1], corners[:, 2])
+        corners = np.column_stack([px, py, pz])
         faces = [
             [corners[i] for i in (0, 1, 2, 3)],  # bottom
             [corners[i] for i in (4, 5, 6, 7)],  # top
@@ -260,7 +340,7 @@ def _add_obstacle_3d(ax, o: dict, color: str = "#888888", alpha: float = 0.18) -
         ax.add_collection3d(coll)
 
 
-def plot_trajectory_3d(log: dict, ax=None, stride: int = 1):
+def plot_trajectory_3d(log: dict, ax=None, stride: int = 1, interactive: bool = False):
     """3D trajectory plot with obstacles as wireframes (spheres/cylinders) or
     translucent faces (boxes). Stride decimates the per-drone polyline, same
     as the 2D plot."""
@@ -272,12 +352,17 @@ def plot_trajectory_3d(log: dict, ax=None, stride: int = 1):
 
     for obs in log.get("obstacles", []):
         _add_obstacle_3d(ax, obs)
+    for line in log.get("courseLines", []):
+        color = _course_marker_color(line.get("role", ""))
+        _add_obstacle_3d(ax, {"type": "Box", **line}, color=color, alpha=0.24)
 
     trajs = log.get("trajectories", [])
-    embodied_id = log.get("embodiedId", None)
     cmap = plt.get_cmap("tab20")
 
+    t0 = _t0(log)
     all_pts = []  # accumulate for axis-limit computation
+    animated_trajs = []
+    embodied_label_used = False
     for i, drone in enumerate(trajs):
         frames = drone.get("frames", [])
         if not frames:
@@ -288,24 +373,44 @@ def plot_trajectory_3d(log: dict, ax=None, stride: int = 1):
         xs = np.fromiter((f["x"] for f in sampled), dtype=float, count=len(sampled))
         ys = np.fromiter((f["y"] for f in sampled), dtype=float, count=len(sampled))
         zs = np.fromiter((f["z"] for f in sampled), dtype=float, count=len(sampled))
-        all_pts.append((xs, ys, zs))
+        ts = np.fromiter((f["t"] - t0 for f in sampled), dtype=float, count=len(sampled))
+        emb = np.fromiter((f.get("e", 0) for f in sampled), dtype=int, count=len(sampled)) > 0
+        px, py, pz = _unity_to_plot3d(xs, ys, zs)
+        all_pts.append((px, py, pz))
 
-        if drone.get("id") == embodied_id:
-            ax.plot(xs, ys, zs, color="red", lw=2.0, alpha=0.95,
-                    label=f"embodied ({drone.get('name','?')})")
-            f0, fL = frames[0], frames[-1]
-            ax.scatter([f0["x"]], [f0["y"]], [f0["z"]], marker="o", s=70,
-                       facecolor="white", edgecolor="red", label="embodied start")
-            ax.scatter([fL["x"]], [fL["y"]], [fL["z"]], marker="s", s=70,
-                       facecolor="white", edgecolor="red", label="embodied end")
-        else:
-            ax.plot(xs, ys, zs, color=cmap(i % 20), lw=0.7, alpha=0.7)
+        base_color = cmap(i % 20)
+        line, = ax.plot(px, py, pz, color=base_color, lw=0.7, alpha=0.45)
+        for start, end in _embodied_segments(emb):
+            if end - start < 2:
+                continue
+            label = "embodied segment" if not embodied_label_used else None
+            ax.plot(px[start:end], py[start:end], pz[start:end], color="red",
+                    lw=2.2, alpha=0.95, label=label)
+            embodied_label_used = True
+
+        head = None
+        if interactive:
+            head_color = "red" if emb[-1] else base_color
+            head_size = 28 if emb[-1] else 14
+            head = ax.scatter([px[-1]], [py[-1]], [pz[-1]], s=head_size,
+                              color=head_color, alpha=0.95, depthshade=False)
+            animated_trajs.append({
+                "t": ts,
+                "x": px,
+                "y": py,
+                "z": pz,
+                "embodied": emb,
+                "base_color": base_color,
+                "line": line,
+                "head": head,
+            })
 
     crashes = log.get("crashes", [])
     if crashes:
-        ax.scatter([c["x"] for c in crashes],
-                   [c["y"] for c in crashes],
-                   [c["z"] for c in crashes],
+        cx, cy, cz = _unity_to_plot3d([c["x"] for c in crashes],
+                                      [c["y"] for c in crashes],
+                                      [c["z"] for c in crashes])
+        ax.scatter(cx, cy, cz,
                    marker="x", s=70, color="black", linewidths=2.0,
                    label=f"crashes ({len(crashes)})")
 
@@ -317,9 +422,15 @@ def plot_trajectory_3d(log: dict, ax=None, stride: int = 1):
         zs = np.concatenate([p[2] for p in all_pts])
         # Include obstacle centers in the bounding box so they're never cropped.
         for o in log.get("obstacles", []):
-            xs = np.append(xs, float(o["cx"]))
-            ys = np.append(ys, float(o["cy"]))
-            zs = np.append(zs, float(o["cz"]))
+            px, py, pz = _unity_to_plot3d(float(o["cx"]), float(o["cy"]), float(o["cz"]))
+            xs = np.append(xs, px)
+            ys = np.append(ys, py)
+            zs = np.append(zs, pz)
+        for line in log.get("courseLines", []):
+            px, py, pz = _unity_to_plot3d(float(line["cx"]), float(line["cy"]), float(line["cz"]))
+            xs = np.append(xs, px)
+            ys = np.append(ys, py)
+            zs = np.append(zs, pz)
         mid = np.array([(xs.max() + xs.min()) / 2,
                         (ys.max() + ys.min()) / 2,
                         (zs.max() + zs.min()) / 2])
@@ -335,13 +446,50 @@ def plot_trajectory_3d(log: dict, ax=None, stride: int = 1):
         except AttributeError:
             pass  # older matplotlib
 
-    ax.set_xlabel("X (m)"); ax.set_ylabel("Y (m)"); ax.set_zlabel("Z (m)")
+    ax.set_xlabel("X (m)"); ax.set_ylabel("Z (m)"); ax.set_zlabel("Y (m)")
     title_extra = f"  (stride={stride})" if stride > 1 else ""
     ax.set_title(f"3D trajectory + obstacles + crashes — "
                  f"PID {log.get('pid','?')} ({log.get('haptics','?')}/{log.get('order','?')})"
                  f"{title_extra}")
     ax.legend(loc="best", fontsize=8)
+    if interactive:
+        _attach_trajectory_time_slider(ax, animated_trajs)
     return ax
+
+
+def _attach_trajectory_time_slider(ax, animated_trajs: list[dict]) -> None:
+    """Attach a time slider to a 3D trajectory axis."""
+    if not animated_trajs:
+        return
+
+    t_min = min(float(tr["t"][0]) for tr in animated_trajs if len(tr["t"]))
+    t_max = max(float(tr["t"][-1]) for tr in animated_trajs if len(tr["t"]))
+    if t_max <= t_min:
+        return
+
+    fig = ax.figure
+    fig.subplots_adjust(bottom=0.16)
+    slider_ax = fig.add_axes([0.18, 0.045, 0.64, 0.03])
+    slider = Slider(slider_ax, "time (s)", t_min, t_max, valinit=t_max, valfmt="%.1f")
+
+    def update(t_now: float) -> None:
+        for tr in animated_trajs:
+            ts = tr["t"]
+            idx = int(np.searchsorted(ts, t_now, side="right"))
+            if idx <= 0:
+                tr["line"].set_data_3d([], [], [])
+                tr["head"]._offsets3d = ([], [], [])
+                continue
+
+            tr["line"].set_data_3d(tr["x"][:idx], tr["y"][:idx], tr["z"][:idx])
+            tr["head"]._offsets3d = ([tr["x"][idx - 1]], [tr["y"][idx - 1]], [tr["z"][idx - 1]])
+            is_embodied = bool(tr["embodied"][idx - 1])
+            tr["head"].set_color("red" if is_embodied else tr["base_color"])
+            tr["head"].set_sizes([28 if is_embodied else 14])
+        fig.canvas.draw_idle()
+
+    slider.on_changed(update)
+    fig._trajectory_time_slider = slider  # keep widget alive
 
 
 def plot_swarm_health(log: dict, ax=None):
@@ -459,6 +607,7 @@ def plot_gaps(log: dict, ax=None):
         ax.text(0.5, 0.5, "no subnetwork data",
                 ha="center", va="center", transform=ax.transAxes)
         ax.set_aspect("equal", adjustable="datalim")
+        _match_unity_scene_top_view(ax)
         return ax
 
     by_t: dict[float, list] = {}
@@ -469,6 +618,7 @@ def plot_gaps(log: dict, ax=None):
         ax.text(0.5, 0.5, "swarm never split during this run",
                 ha="center", va="center", transform=ax.transAxes)
         ax.set_aspect("equal", adjustable="datalim")
+        _match_unity_scene_top_view(ax)
         return ax
 
     t0 = _t0(log)
@@ -488,8 +638,61 @@ def plot_gaps(log: dict, ax=None):
     plt.colorbar(sm, ax=ax, label="time since start (s)")
     ax.set_aspect("equal", adjustable="datalim")
     ax.set_xlabel("X (m)"); ax.set_ylabel("Z (m)")
+    _match_unity_scene_top_view(ax)
     ax.set_title(f"Subnetwork centroids during gaps "
                  f"(n={len(split_t)} split samples; size scales with drones)")
+    return ax
+
+
+_STAR_GAP_RE = re.compile(r"^Star_(?P<gap>.+)_(?P<row>\d+)_(?P<col>\d+)$")
+_GAP_INDEX_RE = re.compile(r"\((?P<idx>\d+)\)")
+
+
+def _gap_name_from_collectible(name: str) -> str:
+    """Extract the gap name from generated star names."""
+    m = _STAR_GAP_RE.match(name or "")
+    if not m:
+        return "unknown"
+    return m.group("gap")
+
+
+def _gap_sort_key(name: str) -> tuple[int, int | str]:
+    m = _GAP_INDEX_RE.search(name)
+    if m:
+        return (0, int(m.group("idx")))
+    if name == "unknown":
+        return (2, name)
+    return (1, name)
+
+
+def plot_collectibles_by_gap(log: dict, ax=None):
+    """Bar chart: number of collected star events grouped by generated gap."""
+    if ax is None:
+        _, ax = plt.subplots(figsize=(11, 4.5))
+
+    events = log.get("collectibles", [])
+    if not events:
+        ax.text(0.5, 0.5, "no collectible events recorded\n(run with updated SwarmTrajectoryRecorder)",
+                ha="center", va="center", transform=ax.transAxes)
+        ax.axis("off")
+        return ax
+
+    counts = Counter(_gap_name_from_collectible(e.get("name", "")) for e in events)
+    gaps = sorted(counts, key=_gap_sort_key)
+    values = [counts[g] for g in gaps]
+    xs = np.arange(len(gaps))
+
+    ax.bar(xs, values, color="tab:blue", alpha=0.82)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(gaps, rotation=45, ha="right")
+    ax.set_ylabel("collected stars")
+    ax.set_xlabel("gap")
+    ax.set_title(f"Collected stars per gap (n={len(events)} events)")
+    ax.grid(True, axis="y", alpha=0.25)
+
+    for x, value in zip(xs, values):
+        ax.text(x, value, str(value), ha="center", va="bottom", fontsize=8)
+
     return ax
 
 
@@ -543,8 +746,11 @@ def make_all(json_path: Path, outdir: Path, stride: int = 1, show: bool = False)
 
     fig = plt.figure(figsize=(11, 9))
     ax = fig.add_subplot(111, projection="3d")
-    plot_trajectory_3d(log, ax=ax, stride=stride)
-    fig.tight_layout(); fig.savefig(outdir / f"{stem}_trajectory_3d.png", dpi=130)
+    plot_trajectory_3d(log, ax=ax, stride=stride, interactive=show)
+    if show:
+        fig.savefig(outdir / f"{stem}_trajectory_3d.png", dpi=130)
+    else:
+        fig.tight_layout(); fig.savefig(outdir / f"{stem}_trajectory_3d.png", dpi=130)
     figs.append(fig)
 
     fig, ax = plt.subplots(figsize=(12, 5))
@@ -567,12 +773,17 @@ def make_all(json_path: Path, outdir: Path, stride: int = 1, show: bool = False)
     fig.tight_layout(); fig.savefig(outdir / f"{stem}_gaps.png", dpi=130)
     figs.append(fig)
 
+    fig, ax = plt.subplots(figsize=(11, 4.5))
+    plot_collectibles_by_gap(log, ax=ax)
+    fig.tight_layout(); fig.savefig(outdir / f"{stem}_collectibles_by_gap.png", dpi=130)
+    figs.append(fig)
+
     fig, ax = plt.subplots(figsize=(7, 5))
     plot_summary(log, ax=ax)
     fig.tight_layout(); fig.savefig(outdir / f"{stem}_summary.png", dpi=130)
     figs.append(fig)
 
-    print(f"Wrote 7 plots to {outdir}/")
+    print(f"Wrote 8 plots to {outdir}/")
     if show:
         plt.show()
     else:
