@@ -15,6 +15,7 @@ What gets produced (PNGs in <outdir>):
     <stem>_inputs.png        - fused movement/spread/rotation + per-source rotation breakdown
     <stem>_gaps.png          - subnetwork centroids during gaps (color = time, size scales with drones)
     <stem>_collectibles_by_gap.png - collected stars per generated gap
+    <stem>_gap_center_deviation.png - swarm-center deviation from each gap center at plane crossing
     <stem>_summary.png       - text card with headline stats
 
 Run with the SwarmControl uv env:
@@ -75,6 +76,83 @@ def autodetect_json(start: Path) -> Path | None:
             if files:
                 return files[0]
     return None
+
+
+def autodetect_course_json(start: Path) -> Path | None:
+    """Find the exported obstacle-course JSON that contains gap centers."""
+    cur = start.resolve()
+    for parent in (cur, *cur.parents):
+        candidates = [
+            parent / "Data" / "default" / "ObstacleCourse" / "TestCourse.json",
+            parent / "SoundMapping" / "SoundMappingUnity" / "Assets" / "Data" / "default" / "ObstacleCourse" / "TestCourse.json",
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+    return None
+
+
+def load_course_gaps(path: str | Path | None) -> list[dict]:
+    if path is None:
+        return []
+    data = load(path)
+    return sorted(data.get("gaps", []), key=lambda g: int(g.get("index", 0)))
+
+
+def _box_yaw(o: dict) -> float:
+    return _yaw_from_quat(o.get("qw", 1.0), o.get("qx", 0.0),
+                          o.get("qy", 0.0), o.get("qz", 0.0))
+
+
+def derive_gaps_from_obstacles(obstacles: list[dict]) -> list[dict]:
+    """Reconstruct gap planes/centers from wall boxes saved in the run file."""
+    groups: dict[tuple[str, float], list[dict]] = {}
+    for o in obstacles or []:
+        if o.get("type") != "Box":
+            continue
+        if float(o.get("sy", 0.0)) < 1.0:
+            continue
+        yaw = _box_yaw(o)
+        if abs(np.cos(yaw)) >= abs(np.sin(yaw)):
+            key = ("z", round(float(o["cz"]), 2))
+        else:
+            key = ("x", round(float(o["cx"]), 2))
+        groups.setdefault(key, []).append(o)
+
+    gaps = []
+    for (axis, coord), walls in groups.items():
+        if len(walls) < 3:
+            continue
+        cx = float(np.mean([w["cx"] for w in walls]))
+        cy = float(np.mean([w["cy"] for w in walls]))
+        cz = float(np.mean([w["cz"] for w in walls]))
+        if axis == "z":
+            normal = [0.0, 0.0, 1.0]
+            tangent = [1.0, 0.0, 0.0]
+        else:
+            normal = [1.0, 0.0, 0.0]
+            tangent = [0.0, 0.0, 1.0]
+        gaps.append({
+            "index": -1,
+            "centerX": cx,
+            "centerY": cy,
+            "centerZ": cz,
+            "rotX": 0.0,
+            "rotY": 90.0 if axis == "x" else 0.0,
+            "rotZ": 0.0,
+            "_source": "obstacles",
+            "_axis": axis,
+            "_normal": normal,
+            "_tangent": tangent,
+        })
+
+    # Index by the order in which the swarm center reaches each reconstructed
+    # plane later in `compute_gap_center_deviations`; this static fallback keeps
+    # labels deterministic even before crossing times are known.
+    gaps.sort(key=lambda g: (float(g["centerZ"]), float(g["centerX"])))
+    for i, gap in enumerate(gaps):
+        gap["index"] = i
+    return gaps
 
 
 # --------------------------------------------------------------------------- #
@@ -204,7 +282,8 @@ def _mark_trial_window(log: dict, ax, t0: float) -> None:
 # Plots
 # --------------------------------------------------------------------------- #
 
-def plot_trajectory_2d(log: dict, ax=None, stride: int = 1):
+def plot_trajectory_2d(log: dict, ax=None, stride: int = 1,
+                       gap_deviations: list[dict] | None = None):
     """Top-down (XZ) drone paths + obstacles + crash markers.
 
     `stride` keeps every Nth frame in the path polylines. For long runs (e.g.
@@ -254,6 +333,16 @@ def plot_trajectory_2d(log: dict, ax=None, stride: int = 1):
         ax.scatter([c["x"] for c in crashes], [c["z"] for c in crashes],
                    marker="x", s=90, color="black", linewidths=2.2, zorder=6,
                    label=f"crashes ({len(crashes)})")
+
+    if gap_deviations:
+        ax.scatter([d["x"] for d in gap_deviations], [d["z"] for d in gap_deviations],
+                   marker="D", s=58, facecolor="white",
+                   edgecolor="tab:orange", linewidths=1.8, zorder=7,
+                   label="swarm-center gap crossings")
+        for d in gap_deviations:
+            ax.annotate(str(d["index"]), (d["x"], d["z"]),
+                        xytext=(4, 4), textcoords="offset points",
+                        fontsize=8, color="tab:orange", zorder=8)
 
     ax.set_aspect("equal", adjustable="datalim")
     ax.set_xlabel("X (m)"); ax.set_ylabel("Z (m)")
@@ -678,6 +767,190 @@ def _gap_sort_key(name: str) -> tuple[int, int | str]:
     return (1, name)
 
 
+def _swarm_center_series(log: dict) -> tuple[np.ndarray, np.ndarray]:
+    """Return times and Unity XYZ swarm-center samples.
+
+    Prefer `subnetworks[idx=0]`, which the recorder defines as the largest
+    connected component / main group. Older or partial files fall back to the
+    centroid across all per-drone samples at each timestamp.
+    """
+    main_rows = [s for s in log.get("subnetworks", []) if int(s.get("idx", 0)) == 0]
+    if main_rows:
+        main_rows.sort(key=lambda s: float(s["t"]))
+        times = np.array([float(s["t"]) for s in main_rows], dtype=float)
+        points = np.array([[float(s["cx"]), float(s["cy"]), float(s["cz"])] for s in main_rows], dtype=float)
+        return times, points
+
+    by_t: dict[float, list[tuple[float, float, float]]] = {}
+    for drone in log.get("trajectories", []):
+        for frame in drone.get("frames", []):
+            by_t.setdefault(float(frame["t"]), []).append(
+                (float(frame["x"]), float(frame["y"]), float(frame["z"]))
+            )
+    if not by_t:
+        return np.array([], dtype=float), np.empty((0, 3), dtype=float)
+
+    times = np.array(sorted(by_t), dtype=float)
+    points = np.array([np.mean(by_t[t], axis=0) for t in times], dtype=float)
+    return times, points
+
+
+def _gap_rotation_matrix(gap: dict) -> np.ndarray:
+    """Approximate gap local-to-world rotation matrix from exported Euler angles."""
+    rx = np.deg2rad(float(gap.get("rotX", 0.0)))
+    ry = np.deg2rad(float(gap.get("rotY", 0.0)))
+    rz = np.deg2rad(float(gap.get("rotZ", 0.0)))
+    cx, sx = np.cos(rx), np.sin(rx)
+    cy, sy = np.cos(ry), np.sin(ry)
+    cz, sz = np.cos(rz), np.sin(rz)
+    rx_mat = np.array([[1, 0, 0], [0, cx, -sx], [0, sx, cx]], dtype=float)
+    ry_mat = np.array([[cy, 0, sy], [0, 1, 0], [-sy, 0, cy]], dtype=float)
+    rz_mat = np.array([[cz, -sz, 0], [sz, cz, 0], [0, 0, 1]], dtype=float)
+    return rz_mat @ ry_mat @ rx_mat
+
+
+def _gap_plane_normal(gap: dict) -> np.ndarray:
+    """Gap plane normal in Unity XYZ."""
+    normal = _gap_rotation_matrix(gap) @ np.array([0.0, 0.0, 1.0])
+    norm = float(np.linalg.norm(normal))
+    return normal / norm if norm > 1e-12 else np.array([0.0, 0.0, 1.0])
+
+
+def _gap_plane_axes(gap: dict) -> tuple[np.ndarray, np.ndarray]:
+    """Return gap-plane normal and in-plane horizontal axis in Unity XYZ.
+
+    Prefer wall-center geometry over the gap transform rotation so the analysis
+    plane matches the wall line shown in the 2D trajectory plot.
+    """
+    if "_normal" in gap and "_tangent" in gap:
+        normal = np.array(gap["_normal"], dtype=float)
+        tangent = np.array(gap["_tangent"], dtype=float)
+        normal = normal / max(1e-12, float(np.linalg.norm(normal)))
+        tangent = tangent / max(1e-12, float(np.linalg.norm(tangent)))
+        return normal, tangent
+
+    wall_points = []
+    for wall_name in ("left", "right", "top", "bottom"):
+        wall = gap.get(wall_name)
+        if wall:
+            wall_points.append([float(wall["x"]), float(wall["z"])])
+
+    if len(wall_points) >= 2:
+        xz = np.array(wall_points, dtype=float)
+        centered = xz - np.mean(xz, axis=0)
+        _, _, vh = np.linalg.svd(centered, full_matrices=False)
+        line_xz = vh[0]
+        line_norm = float(np.linalg.norm(line_xz))
+        if line_norm > 1e-12:
+            line_xz = line_xz / line_norm
+            tangent = np.array([line_xz[0], 0.0, line_xz[1]], dtype=float)
+            normal = np.array([-line_xz[1], 0.0, line_xz[0]], dtype=float)
+            return normal, tangent
+
+    rotation = _gap_rotation_matrix(gap)
+    normal = rotation @ np.array([0.0, 0.0, 1.0])
+    normal = normal / max(1e-12, float(np.linalg.norm(normal)))
+    tangent = rotation @ np.array([1.0, 0.0, 0.0])
+    tangent = tangent / max(1e-12, float(np.linalg.norm(tangent)))
+    return normal, tangent
+
+
+def compute_gap_center_deviations(log: dict, gaps: list[dict]) -> list[dict]:
+    """Deviation from gap center at each ordered swarm-center plane crossing."""
+    times, points = _swarm_center_series(log)
+    if len(times) < 2 or not gaps:
+        return []
+
+    results = []
+    after_t = -np.inf
+    for gap in gaps:
+        center = np.array([
+            float(gap["centerX"]),
+            float(gap["centerY"]),
+            float(gap["centerZ"]),
+        ], dtype=float)
+        normal, tangent = _gap_plane_axes(gap)
+        signed = (points - center) @ normal
+
+        hits = []
+        exact = np.flatnonzero(np.isclose(signed, 0.0, atol=1e-6))
+        for i in exact:
+            hits.append((float(times[int(i)]), points[int(i)]))
+
+        crossings = np.flatnonzero(signed[:-1] * signed[1:] < 0.0)
+        for i_raw in crossings:
+            i = int(i_raw)
+            alpha = signed[i] / (signed[i] - signed[i + 1])
+            point = points[i] + alpha * (points[i + 1] - points[i])
+            t = times[i] + alpha * (times[i + 1] - times[i])
+            hits.append((float(t), point))
+
+        if not hits:
+            continue
+
+        hits.sort(key=lambda h: h[0])
+        ordered_hits = [h for h in hits if h[0] > after_t]
+        if not ordered_hits:
+            continue
+
+        t_cross, point_cross = ordered_hits[0]
+        after_t = t_cross
+        delta = point_cross - center
+        in_plane_horizontal = float(np.dot(delta, tangent))
+        results.append({
+            "index": int(gap.get("index", len(results))),
+            "t": float(t_cross),
+            "x": float(point_cross[0]),
+            "y": float(point_cross[1]),
+            "z": float(point_cross[2]),
+            "deviation": float(np.hypot(in_plane_horizontal, delta[1])),
+            "dx": float(delta[0]),
+            "dy": float(delta[1]),
+            "dz": float(delta[2]),
+        })
+    return results
+
+
+def plot_gap_center_deviation(log: dict, gaps: list[dict], ax=None):
+    """Bar chart: swarm-center distance from each gap center at plane crossing."""
+    if ax is None:
+        _, ax = plt.subplots(figsize=(11, 4.5))
+
+    if not gaps:
+        ax.text(0.5, 0.5, "no course gap centers found\n(expected Assets/Data/default/ObstacleCourse/TestCourse.json)",
+                ha="center", va="center", transform=ax.transAxes)
+        ax.axis("off")
+        return ax
+
+    deviations = compute_gap_center_deviations(log, gaps)
+    if not deviations:
+        ax.text(0.5, 0.5, "no swarm-center crossings found",
+                ha="center", va="center", transform=ax.transAxes)
+        ax.axis("off")
+        return ax
+
+    labels = [f"gap {d['index']}" for d in deviations]
+    values = [d["deviation"] for d in deviations]
+    xs = np.arange(len(deviations))
+    mean_dev = float(np.mean(values))
+
+    ax.bar(xs, values, color="tab:orange", alpha=0.82)
+    ax.axhline(mean_dev, color="black", linestyle="--", linewidth=1.2,
+               label=f"mean = {mean_dev:.2f} m")
+    ax.set_xticks(xs)
+    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.set_ylabel("deviation at gap plane (m)")
+    ax.set_xlabel("gap")
+    ax.set_title("Swarm-center deviation from gap center at plane crossing")
+    ax.grid(True, axis="y", alpha=0.25)
+    ax.legend(loc="best")
+
+    for x, value in zip(xs, values):
+        ax.text(x, value, f"{value:.2f}", ha="center", va="bottom", fontsize=8)
+
+    return ax
+
+
 def plot_collectibles_by_gap(log: dict, ax=None):
     """Bar chart: number of collected star events grouped by generated gap."""
     if ax is None:
@@ -709,7 +982,7 @@ def plot_collectibles_by_gap(log: dict, ax=None):
     return ax
 
 
-def plot_summary(log: dict, ax=None):
+def plot_summary(log: dict, ax=None, gap_deviations: list[dict] | None = None):
     """Text card with the headline run metrics."""
     if ax is None:
         _, ax = plt.subplots(figsize=(7, 5))
@@ -721,6 +994,9 @@ def plot_summary(log: dict, ax=None):
     sf        = log.get("swarmFrames", [])
     mean_disc = float(np.mean([f["nDisc"] for f in sf])) if sf else 0.0
     max_sub   = int(np.max([f["nSub"] for f in sf])) if sf else 0
+    mean_gap_dev = None
+    if gap_deviations:
+        mean_gap_dev = float(np.mean([d["deviation"] for d in gap_deviations]))
 
     ratio = f"  ({100 * picked / total:.0f}%)" if total > 0 else ""
     lines = [
@@ -734,6 +1010,10 @@ def plot_summary(log: dict, ax=None):
         f"Mean disconnected:   {mean_disc:.2f} drones/frame",
         f"Max subnetworks:     {max_sub}  ({max(0, max_sub - 1)} gaps at peak)",
     ]
+    if mean_gap_dev is not None:
+        lines.extend([
+            f"Mean gap deviation: {mean_gap_dev:.2f} m  ({len(gap_deviations)} crossings)",
+        ])
     ax.axis("off")
     ax.text(0.02, 0.98, "\n".join(lines), family="monospace", fontsize=11,
             va="top", ha="left", transform=ax.transAxes)
@@ -747,13 +1027,18 @@ def plot_summary(log: dict, ax=None):
 
 def make_all(json_path: Path, outdir: Path, stride: int = 1, show: bool = False) -> None:
     log = load(json_path)
+    course_path = autodetect_course_json(json_path)
+    gaps = derive_gaps_from_obstacles(log.get("obstacles", []))
+    if not gaps:
+        gaps = load_course_gaps(course_path)
+    gap_deviations = compute_gap_center_deviations(log, gaps)
     outdir.mkdir(parents=True, exist_ok=True)
     stem = json_path.stem
 
     figs: list = []
 
     fig, ax = plt.subplots(figsize=(10, 10))
-    plot_trajectory_2d(log, ax=ax, stride=stride)
+    plot_trajectory_2d(log, ax=ax, stride=stride, gap_deviations=gap_deviations)
     fig.tight_layout(); fig.savefig(outdir / f"{stem}_trajectory.png", dpi=130)
     figs.append(fig)
 
@@ -791,12 +1076,22 @@ def make_all(json_path: Path, outdir: Path, stride: int = 1, show: bool = False)
     fig.tight_layout(); fig.savefig(outdir / f"{stem}_collectibles_by_gap.png", dpi=130)
     figs.append(fig)
 
+    fig, ax = plt.subplots(figsize=(11, 4.5))
+    plot_gap_center_deviation(log, gaps, ax=ax)
+    fig.tight_layout(); fig.savefig(outdir / f"{stem}_gap_center_deviation.png", dpi=130)
+    figs.append(fig)
+
     fig, ax = plt.subplots(figsize=(7, 5))
-    plot_summary(log, ax=ax)
+    plot_summary(log, ax=ax, gap_deviations=gap_deviations)
     fig.tight_layout(); fig.savefig(outdir / f"{stem}_summary.png", dpi=130)
     figs.append(fig)
 
-    print(f"Wrote 8 plots to {outdir}/")
+    print(f"Wrote 9 plots to {outdir}/")
+    if gap_deviations:
+        mean_dev = float(np.mean([d["deviation"] for d in gap_deviations]))
+        print(f"Mean gap-center deviation: {mean_dev:.3f} m ({len(gap_deviations)} crossings)")
+    elif course_path is None:
+        print("No course gap-center file found; skipped gap-center deviation statistics.")
     if show:
         plt.show()
     else:
