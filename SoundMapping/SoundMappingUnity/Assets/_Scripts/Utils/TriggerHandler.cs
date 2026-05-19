@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Events; // For UnityEvent
 using UnityEditor;
 using System; // For PropertyDrawer
+using System.Collections;
 
 public class TriggerHandlerWithCallback : MonoBehaviour
 {
@@ -42,6 +43,8 @@ public class TriggerHandlerWithCallback : MonoBehaviour
 
     [SerializeField] bool useUnityEvent = true;
     [SerializeField] bool isStart = true;
+    [SerializeField] float postRunTailSeconds = 1.0f;
+    private bool runStopped = false;
 
 
     public UnityEvent onTriggerEnter; // Callback to assign in the Inspector
@@ -68,9 +71,17 @@ public class TriggerHandlerWithCallback : MonoBehaviour
                     //         print(gm.name);
                     SwarmTrajectoryRecorder.MarkTrialStart("Run");
                     gm.GetComponent<Timer>().StartTimer();
+                    runStopped = false;
                 }
                 else
                 {
+                    if (!runStopped)
+                    {
+                        SwarmTrajectoryRecorder.MarkTrialStop("Run");
+                        gm.GetComponent<Timer>().StopTimer();
+                        runStopped = true;
+                    }
+
                     if(!allDronesConnected)
                     {
                         textInfo.setTextErrorStatic("No drones must be left behind", 2);
@@ -82,9 +93,7 @@ public class TriggerHandlerWithCallback : MonoBehaviour
                         {
                        //     XboxScreenRecorder.StopRecordingAndSave();
                             print("Level Finished from trigger");
-                            SwarmTrajectoryRecorder.MarkTrialStop("Run");
-                           saveInfoToJSON.exportData(false);
-                            //  gm.GetComponent<Timer>().StopTimer();
+                            StartCoroutine(ExportAfterPostRunTail());
                         }else{
                             swarmModel.restart();
                         }
@@ -101,6 +110,13 @@ public class TriggerHandlerWithCallback : MonoBehaviour
             }
             
         }
+    }
+
+    private IEnumerator ExportAfterPostRunTail()
+    {
+        if (postRunTailSeconds > 0f)
+            yield return new WaitForSeconds(postRunTailSeconds);
+        saveInfoToJSON.exportData(false);
     }
 }
 

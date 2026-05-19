@@ -641,6 +641,7 @@ public class InputFusionManager : MonoBehaviour
         // Display current input state in top-left corner (for debugging)
         GUILayout.BeginArea(new Rect(10, 10, 400, 300));
         GUILayout.Label($"<b>=== INPUT FUSION STATUS ===</b>");
+        GUILayout.Label($"Run Timer: {Timer.elapsedTime:F2}s");
         
         // Show calibration status prominently
         if (isCalibrating)

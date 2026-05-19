@@ -189,6 +189,17 @@ def _embodied_segments(mask: np.ndarray) -> list[tuple[int, int]]:
     return [(int(changes[i]), int(changes[i + 1])) for i in range(0, len(changes), 2)]
 
 
+def _mark_trial_window(log: dict, ax, t0: float) -> None:
+    """Overlay Starting_line / Ending_line timing markers on a time-axis plot."""
+    for trial in log.get("trials", []):
+        ts = trial.get("startGameTime", 0) - t0
+        ax.axvline(ts, color="black", linestyle=":", alpha=0.45)
+        if trial.get("endGameTime", 0) > 0:
+            te = trial["endGameTime"] - t0
+            ax.axvline(te, color="black", linestyle=":", alpha=0.45)
+            ax.axvspan(ts, te, alpha=0.04, color="black")
+
+
 # --------------------------------------------------------------------------- #
 # Plots
 # --------------------------------------------------------------------------- #
@@ -586,6 +597,8 @@ def plot_inputs(log: dict, axes=None):
     if np.any(~np.isnan(pose_y)): axes[3].plot(t, pose_y, label="webcam pose yaw",  color="tab:pink",   lw=0.8);       plotted = True
     if plotted:
         axes[3].legend(loc="best", fontsize=8)
+    for ax in axes:
+        _mark_trial_window(log, ax, t0)
     axes[3].set_ylabel("rotation sources")
     axes[3].set_xlabel("time since start (s)")
     axes[3].grid(True, alpha=0.3)

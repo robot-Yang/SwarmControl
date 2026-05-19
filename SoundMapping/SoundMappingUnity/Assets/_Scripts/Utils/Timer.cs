@@ -116,6 +116,8 @@ public class Timer : MonoBehaviour
     {
         if (timerCoroutine == null)
         {
+            elapsedTime = 0f;
+            UpdateTimerDisplay();
             HideLeaderboard();
             timerCoroutine = StartCoroutine(TimerCoroutine());
         }
@@ -145,6 +147,7 @@ public class Timer : MonoBehaviour
         {
             StopCoroutine(timerCoroutine);
             timerCoroutine = null;
+            UpdateTimerDisplay();
           // SaveScore();
         }
     }

@@ -714,13 +714,6 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         // Reset crash buffer for new run
         _crashBuffer.Clear();
 
-        // Reset input buffer for new run
-        _inputBuffer.Clear();
-
-        // Reset swarm-wide and subnetwork buffers for new run
-        _swarmFrameBuffer.Clear();
-        _subnetBuffer.Clear();
-
         // One-shot scene snapshot (total collectibles + obstacle list).
         // Done here rather than at scene-load so collectibles spawned by trial
         // setup scripts are counted, and obstacle lists populated by registrars
