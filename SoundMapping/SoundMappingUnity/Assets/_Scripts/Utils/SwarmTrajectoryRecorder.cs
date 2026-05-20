@@ -74,6 +74,10 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     public string setupSceneName = "Scene Selector";
     [Tooltip("Custom prefix for the output filename. If empty, uses default naming.")]
     public string customFilePrefix = "";
+    [Tooltip("Show a startup prompt that writes into customFilePrefix before saving.")]
+    public bool promptForFilePrefixOnStart = true;
+    [Tooltip("Pause gameplay while the startup filename prompt is open.")]
+    public bool pauseWhileFilePrefixPromptOpen = true;
 
 
     [Header("Quality of life")]
@@ -154,6 +158,10 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
     // Scene/file labeling
     private string _sceneLabelForThisRun = null;
     private bool _justClearedForNewScene = false;
+    private bool _filePrefixPromptOpen;
+    private bool _filePrefixPromptFocused;
+    private string _pendingFilePrefix = "";
+    private float _timeScaleBeforeFilePrefixPrompt = 1f;
 
 
     // Coroutine to ensure swarm exists after scene load
@@ -441,11 +449,14 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         _accum = _autosaveTimer = 0f;
         _recordAccum = 0f;
         _sampleIndex = 0;
+
+        OpenFilePrefixPromptIfNeeded();
     }
 
 
     private void OnDestroy()
     {
+        CloseFilePrefixPrompt(false);
         if (_instance == this) _instance = null;
         SceneManager.sceneLoaded   -= OnSceneLoaded;
         SceneManager.sceneUnloaded -= OnSceneUnloaded;
@@ -459,6 +470,94 @@ public class SwarmTrajectoryRecorder : MonoBehaviour
         RefreshEmbodiedLabeling();
         EnsureInputRefs();
         _samplingEnabled = !waitForDronesToStart || _droneTransforms.Count > 0;
+    }
+
+
+    private void OnGUI()
+    {
+        if (!_filePrefixPromptOpen) return;
+
+        const float width = 420f;
+        const float height = 170f;
+        Rect windowRect = new Rect(
+            (Screen.width - width) * 0.5f,
+            (Screen.height - height) * 0.5f,
+            width,
+            height);
+
+        GUI.ModalWindow(GetInstanceID(), windowRect, DrawFilePrefixPrompt, "Trajectory file name");
+    }
+
+
+    private void DrawFilePrefixPrompt(int windowId)
+    {
+        GUILayout.Space(8f);
+        GUILayout.Label("Enter the file name to save this trajectory.");
+        GUILayout.Label("Leave empty to use the default recorder name.");
+
+        GUI.SetNextControlName("TrajectoryFilePrefixInput");
+        _pendingFilePrefix = GUILayout.TextField(_pendingFilePrefix ?? string.Empty, 128);
+
+        if (!_filePrefixPromptFocused)
+        {
+            GUI.FocusControl("TrajectoryFilePrefixInput");
+            _filePrefixPromptFocused = true;
+        }
+
+        bool submittedByKey = Event.current != null
+            && Event.current.type == EventType.KeyDown
+            && (Event.current.keyCode == KeyCode.Return || Event.current.keyCode == KeyCode.KeypadEnter);
+
+        GUILayout.Space(12f);
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button("Use Default", GUILayout.Height(32f)))
+        {
+            _pendingFilePrefix = string.Empty;
+            CloseFilePrefixPrompt(true);
+        }
+        if (GUILayout.Button("Start", GUILayout.Height(32f)) || submittedByKey)
+        {
+            CloseFilePrefixPrompt(true);
+        }
+        GUILayout.EndHorizontal();
+
+        if (submittedByKey && Event.current != null) Event.current.Use();
+    }
+
+
+    private void OpenFilePrefixPromptIfNeeded()
+    {
+        if (!promptForFilePrefixOnStart || _filePrefixPromptOpen) return;
+
+        _pendingFilePrefix = customFilePrefix ?? string.Empty;
+        _filePrefixPromptOpen = true;
+        _filePrefixPromptFocused = false;
+
+        if (pauseWhileFilePrefixPromptOpen)
+        {
+            _timeScaleBeforeFilePrefixPrompt = Time.timeScale;
+            Time.timeScale = 0f;
+        }
+    }
+
+
+    private void CloseFilePrefixPrompt(bool applyValue)
+    {
+        if (!_filePrefixPromptOpen) return;
+
+        if (applyValue)
+        {
+            string trimmedPrefix = (_pendingFilePrefix ?? string.Empty).Trim();
+            customFilePrefix = string.IsNullOrEmpty(trimmedPrefix) ? string.Empty : trimmedPrefix;
+        }
+
+        _filePrefixPromptOpen = false;
+        _filePrefixPromptFocused = false;
+
+        if (pauseWhileFilePrefixPromptOpen)
+        {
+            Time.timeScale = _timeScaleBeforeFilePrefixPrompt;
+        }
     }
 
     /// <summary>
