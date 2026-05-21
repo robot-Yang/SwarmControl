@@ -6,8 +6,10 @@ using System.IO;
 public class SceneSelectorScriptEditor : Editor
 {
     private const string FpvObs3dScenePath = "Assets/Scenes/SceneStudy/FPVObs_3d.unity";
+    private const string PracticeScenePath = "Assets/Scenes/SceneStudy/Practice.unity";
     private const string Trial1ScenePath = "Assets/Scenes/SceneStudy/trial_1.unity";
     private const string Trial2ScenePath = "Assets/Scenes/SceneStudy/trial_2.unity";
+    private const string Trial3ScenePath = "Assets/Scenes/SceneStudy/trial_3.unity";
     private const string MainScenePath = "Assets/Scenes/SceneStudy/Main.unity";
 
     public override void OnInspectorGUI()
@@ -68,6 +70,11 @@ public class SceneSelectorScriptEditor : Editor
             CopySceneAsMain(FpvObs3dScenePath, "Copy FPVObs_3d as Main");
         }
 
+        if (GUILayout.Button("Copy Practice as Main"))
+        {
+            CopySceneAsMain(PracticeScenePath, "Copy Practice as Main");
+        }
+
         if (GUILayout.Button("Copy trial_1 as Main"))
         {
             CopySceneAsMain(Trial1ScenePath, "Copy trial_1 as Main");
@@ -76,6 +83,11 @@ public class SceneSelectorScriptEditor : Editor
         if (GUILayout.Button("Copy trial_2 as Main"))
         {
             CopySceneAsMain(Trial2ScenePath, "Copy trial_2 as Main");
+        }
+
+        if (GUILayout.Button("Copy trial_3 as Main"))
+        {
+            CopySceneAsMain(Trial3ScenePath, "Copy trial_3 as Main");
         }
 
         EditorGUILayout.EndVertical();
