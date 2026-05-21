@@ -1,11 +1,9 @@
 # SwarmControl
 
-<<<<<<< HEAD
-A study comparing two methods of controlling a drone swarm in VR:
-- **Controller condition** — Taranis RC controller for all axes 
-- **Upper body condition** — Chest IMU for movement, forearm IMUs for spread and height, meta headquest for camera control
-=======
 SwarmControl is a VR research project comparing two methods of controlling a drone swarm. The study investigates how the input modality affects **task performance** and the **sense of embodiment** experienced by the operator.
+
+- **Controller condition** — Taranis RC controller for all axes
+- **Upper body condition** — Chest IMU for movement, forearm IMUs for spread and height, Meta Quest for camera control
 
 ---
 
@@ -27,6 +25,7 @@ Body-based interfaces exploit **motor congruence**: leaning forward moves the sw
 
 **RQ3** — Does haptic feedback enhance embodiment and performance independently of control modality?
 > **H3:** Haptic feedback will increase embodiment scores regardless of condition, by reinforcing the physical presence of the swarm.
+
 ---
 
 ## Conditions
@@ -78,7 +77,6 @@ The path is a linear obstacle course (~400 m) that systematically tests all cont
 
 - Wrist-worn ESP32 actuator nodes deliver feedback on obstacle, network, force field, and crash events
 - All haptic events are time-stamped in the data log
->>>>>>> 8125a7c45bd05353da8567213daaeaa568579a41
 
 ---
 
@@ -111,10 +109,9 @@ Three participants across experience levels completed both conditions. Results s
 
 ```
 SwarmControl/
-<<<<<<< HEAD
-├── SoundMapping/SoundMappingUnity/   # Unity VR application (main project)
-├── Control/                          # Python hand tracking system (MediaPipe)
-└── WebPages/unity-plotter/           # Haptic feedback bridge (ESP32)
+├── SoundMapping/SoundMappingUnity/   # Unity VR application — simulation, input fusion, data logging
+├── Control/                          # Python hand-tracking server (MediaPipe, WebSocket → Unity)
+└── WebPages/unity-plotter/           # Haptic bridge (Unity → Python → USB → ESP32 → actuators)
 ```
 
 ---
@@ -155,6 +152,7 @@ Enable the relevant toggles on the `InputFusionManager` component in the Setup s
 - `useIMUForMovement`
 - `useIMUForRotation`
 - `useArmIMUForSpreadHeight`
+
 ---
 
 ## How to Run
@@ -233,19 +231,13 @@ python Control/src/tools/linearization_tool.py
 | IMU not responding | Power cycle the sensor; restart Unity if needed |
 | Hand tracking not connecting | Make sure `tracker.py` is running before pressing Play |
 | No input response | Check `InputFusionManager` has `TraditionalInput` assigned in Inspector |
-=======
-├── SoundMapping/SoundMappingUnity/   # Unity VR application — simulation, input fusion, data logging
-├── Control/                          # Python hand-tracking server (MediaPipe, WebSocket → Unity)
-└── WebPages/unity-plotter/           # Haptic bridge (Unity → Python → USB → ESP32 → actuators)
-```
+
 ---
 
 ## Next Steps
 
 Integrate full upper-body haptic feedback via a wearable haptic jacket, combining IMU-based swarm control with distributed haptic actuation across the torso — enabling closed-loop sensorimotor control of the swarm.
 
-Then, compare embodiement and performance metric between with/without haptic feedback using upper body based control. 
-
+Then, compare embodiment and performance metrics between with/without haptic feedback using upper-body-based control.
 
 ![IMU](images/back.png)
->>>>>>> 8125a7c45bd05353da8567213daaeaa568579a41
