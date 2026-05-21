@@ -634,9 +634,14 @@ public class InputFusionManager : MonoBehaviour
     // ============================================
     // DEBUG VISUALIZATION
     // ============================================
+    [Header("Debug")]
+    [Tooltip("Show the top-left input-fusion status overlay during play. Off by default to keep the screen clean during study sessions.")]
+    public bool showInputStatusOverlay = false;
+
     void OnGUI()
     {
         if (!Application.isPlaying) return;
+        if (!showInputStatusOverlay) return;
 
         // Display current input state in top-left corner (for debugging)
         GUILayout.BeginArea(new Rect(10, 10, 400, 300));
