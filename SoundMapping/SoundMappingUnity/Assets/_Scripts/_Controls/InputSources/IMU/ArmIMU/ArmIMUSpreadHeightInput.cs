@@ -313,9 +313,13 @@ public class ArmIMUSpreadHeightInput : MonoBehaviour
     // DEBUG
     // ============================================
 
+    [Header("Debug")]
+    [Tooltip("Show the on-screen sensor status panel during play. Off by default to keep the screen clean during runs.")]
+    public bool showDebugInfo = false;
+
     void OnGUI()
     {
-        if (!Application.isPlaying) return;
+        if (!showDebugInfo || !Application.isPlaying) return;
 
         GUILayout.BeginArea(new Rect(10, 580, 340, 160));
         GUILayout.Label("<b>Arm IMU Spread/Height</b>");

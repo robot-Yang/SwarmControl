@@ -105,9 +105,13 @@ public class PoseSpreadInput : MonoBehaviour
     // DEBUG HELPERS
     // ============================================
 
+    [Header("Debug")]
+    [Tooltip("Show the on-screen pose-spread status panel during play. Off by default to keep the screen clean during runs.")]
+    public bool showDebugInfo = false;
+
     void OnGUI()
     {
-        if (!Application.isPlaying) return;
+        if (!showDebugInfo || !Application.isPlaying) return;
 
         GUILayout.BeginArea(new Rect(900, 10, 320, 100));
         GUILayout.Label($"<b>Pose Spread Input</b>  Connected: {IsAvailable}  mode: {mode}");

@@ -91,9 +91,13 @@ public class PoseHeightInput : MonoBehaviour
     // DEBUG HELPERS
     // ============================================
 
+    [Header("Debug")]
+    [Tooltip("Show the on-screen pose-height status panel during play. Off by default to keep the screen clean during runs.")]
+    public bool showDebugInfo = false;
+
     void OnGUI()
     {
-        if (!Application.isPlaying) return;
+        if (!showDebugInfo || !Application.isPlaying) return;
 
         GUILayout.BeginArea(new Rect(900, 30, 300, 100));
         GUILayout.Label($"<b>Pose Height Input</b> Connected: {IsAvailable}");
