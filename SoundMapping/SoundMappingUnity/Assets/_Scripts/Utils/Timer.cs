@@ -268,13 +268,18 @@ public class Timer : MonoBehaviour
 
     private void UpdateTimerDisplay()
     {
-        string extra = LevelConfiguration._TimeSensitive ? " / "+LevelConfiguration._TimeToComplete : "";
-        timerText.text = elapsedTime.ToString("F2") + extra;
+        // Run-timer HUD suppressed — elapsedTime is still tracked and saved to
+        // the trajectory JSON. Restore the original lines below to re-enable.
+        // string extra = LevelConfiguration._TimeSensitive ? " / "+LevelConfiguration._TimeToComplete : "";
+        // timerText.text = elapsedTime.ToString("F2") + extra;
+        if (timerText != null) timerText.text = "";
     }
 
     private void UpdateTimerDisplayNetwork()
     {
-        timerTextNetwork.text = elapsedTimeNetwork.ToString("F2");
+        // Network-timer HUD suppressed — see UpdateTimerDisplay() for rationale.
+        // timerTextNetwork.text = elapsedTimeNetwork.ToString("F2");
+        if (timerTextNetwork != null) timerTextNetwork.text = "";
     }
 
     public static bool isValidTime()

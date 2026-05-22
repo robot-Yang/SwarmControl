@@ -28,12 +28,14 @@ public class textInfo : MonoBehaviour
 
     void Start()
     {
-        textTutorial.text = LevelConfiguration._textTutorial;
+        // On-screen tutorial text suppressed — keep the screen clean during runs.
+        // To re-enable, restore: textTutorial.text = LevelConfiguration._textTutorial;
+        if (textTutorial != null) textTutorial.text = "";
         refresh();
 
         TutorialPlayer.playTuto(LevelConfiguration.sceneNumber);
 
-        
+
     }
 
     void refresh()
@@ -79,15 +81,9 @@ public class textInfo : MonoBehaviour
         }
         */
         
-        if(LevelConfiguration._CollectibleNumber > 0)
-        {
-            CollectibleText.text = "Collectible: " + (LevelConfiguration._CollectibleNumber - GameObject.FindGameObjectsWithTag("Collectibles").Length).ToString() + 
-                                                    "/" + LevelConfiguration._CollectibleNumber.ToString();
-        }
-        else
-        {
-            CollectibleText.text = "";
-        }
+        // Collectible HUD suppressed — count is still tracked internally and
+        // saved to the trajectory JSON via SwarmTrajectoryRecorder.
+        if (CollectibleText != null) CollectibleText.text = "";
     }
 
 

@@ -89,6 +89,11 @@ public class swarmModel : MonoBehaviour
     }
     public static int numberOfDroneCrashed => Timer.numberDroneDied;
 
+    // Drones spawn paused so the participant can finish calibration before any
+    // motion starts. Flip to false (manually via the P key, or programmatically
+    // by another script) to release the swarm.
+    public static bool swarmFrozen = true;
+
     [Header("Gizmos")]
     public bool showObstacleGizmos = false;
     public bool showNetworkGizmos = false;
@@ -244,6 +249,10 @@ public class swarmModel : MonoBehaviour
     {
         TriggerHandlerWithCallback.setGM(this.gameObject);
 
+        // Reset freeze flag on every scene load so a fresh run always starts
+        // paused, even if the previous session pressed P to release.
+        swarmFrozen = true;
+
         Application.targetFrameRate = 30;
         PRIORITYWHENEMBODIED = (int)(numDrones / 3.5f);
 
@@ -269,13 +278,35 @@ public class swarmModel : MonoBehaviour
 
     }
 
-    void FixedUpdate()
+    // Input lives in Update — Input.GetKeyDown is only true for one render
+    // frame, and FixedUpdate may not fire that frame, which silently drops
+    // presses. Calibration scripts (V/C/H/G/J/K/Space) run from their own
+    // Update loops and are not gated by swarmFrozen, so the participant can
+    // calibrate freely before pressing P to release the swarm.
+    void Update()
     {
         if (Input.GetKeyDown(KeyCode.R))
             restartFunction();
 
         if (Input.GetKeyDown(KeyCode.T))
             teleportSwarmToOrigin();
+
+        // Release the swarm after calibration. One-way toggle on purpose —
+        // re-freezing mid-run would leave behavior undefined for any code
+        // that assumes monotonic time progression.
+        if (swarmFrozen && Input.GetKeyDown(KeyCode.P))
+        {
+            swarmFrozen = false;
+            Debug.Log("[swarmModel] Swarm released (P pressed). Drones are now active.");
+        }
+    }
+
+    void FixedUpdate()
+    {
+        // While frozen, skip both the flocking force pass and obstacle force
+        // pass — these are what advance drone state. Network/connectivity
+        // also doesn't need refreshing because nothing is moving.
+        if (swarmFrozen) return;
 
         refreshSwarm();
 
@@ -357,7 +388,10 @@ public class swarmModel : MonoBehaviour
     // Snap every drone in swarmHolder back to its index's spawn-circle slot and zero
     // its velocity/acceleration. Cheaper than restartFunction() — no scene reload, no
     // re-instantiation, embodiment is preserved. Useful when the swarm has drifted out
-    // of reach during a study run.
+    // of reach during a study run. Matches spawn()'s formation exactly, including the
+    // small per-drone y jitter — without that jitter every drone lands at identical
+    // height and the swarm collapses to a 2D ring, which the flocking forces struggle
+    // to recover from.
     void teleportSwarmToOrigin()
     {
         if (swarmHolder == null) return;
@@ -377,7 +411,7 @@ public class swarmModel : MonoBehaviour
             int slot = dc.droneFake.id % slots;
             Vector3 pos = center + new Vector3(
                 spawnRadius * Mathf.Cos(slot * 2 * Mathf.PI / slots),
-                spawnHeight,
+                spawnHeight + UnityEngine.Random.Range(-0.5f, 0.5f),
                 spawnRadius * Mathf.Sin(slot * 2 * Mathf.PI / slots));
 
             dc.droneFake.position     = pos;
